@@ -188,8 +188,10 @@ function hudState() {
 
 async function playMove(move) {
   if (!game || game.status !== 'playing') return;
-  const result = game.applyMove(move);
-  await playback.play(game, result.steps);
+  const session = game;
+  const result = session.applyMove(move);
+  await playback.play(session, result.steps);
+  if (game !== session) return; // quit/restart happened mid-animation
   syncHudToGame();
   lastActivity = performance.now();
   const end = result.steps.find((s) => s.type === 'end');
@@ -247,7 +249,9 @@ function showHint() {
 function handleGameEnd(endStep) {
   progress = recordResult(currentLevelId, endStep.stars, endStep.score);
   const def = getLevel(currentLevelId);
+  const session = game;
   setTimeout(() => {
+    if (game !== session) return; // player already left the game screen
     if (endStep.outcome === 'won') {
       screens.showDialog('won', {
         stars: endStep.stars,
