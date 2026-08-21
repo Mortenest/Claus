@@ -47,6 +47,14 @@ body {
   overflow: hidden;
 }
 
+/* track the dynamic viewport on mobile browsers (URL bar collapse) */
+@supports (height: 100dvh) {
+  body,
+  #app {
+    height: 100dvh;
+  }
+}
+
 /* ---------- screens ---------- */
 
 .screen {

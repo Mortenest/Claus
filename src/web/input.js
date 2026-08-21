@@ -74,6 +74,7 @@ export function createInput(canvas, renderer, handlers) {
   };
   canvas.addEventListener('pointerup', finish);
   canvas.addEventListener('pointercancel', finish);
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
   return {
     clearSelection: () => setSelection(null),
