@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b2a5e"/>
+      <stop offset="1" stop-color="#1d1533"/>
+    </linearGradient>
+    <linearGradient id="candy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff6b8a"/>
+      <stop offset="1" stop-color="#e83e5e"/>
+    </linearGradient>
+    <linearGradient id="wrap" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff8ba3"/>
+      <stop offset="1" stop-color="#d63456"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- wrapper twists -->
+  <path d="M118 256 L58 206 Q76 256 58 306 Z" fill="url(#wrap)" stroke="#a8203e" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M394 256 L454 206 Q436 256 454 306 Z" fill="url(#wrap)" stroke="#a8203e" stroke-width="10" stroke-linejoin="round"/>
+  <!-- candy body -->
+  <circle cx="256" cy="256" r="148" fill="url(#candy)" stroke="#a8203e" stroke-width="12"/>
+  <!-- swirl -->
+  <path d="M256 118 A138 138 0 0 1 394 256" fill="none" stroke="#ffd1db" stroke-width="26" stroke-linecap="round" opacity="0.85"/>
+  <path d="M256 394 A138 138 0 0 1 118 256" fill="none" stroke="#c22a4c" stroke-width="26" stroke-linecap="round" opacity="0.7"/>
+  <!-- gloss -->
+  <ellipse cx="205" cy="192" rx="56" ry="38" fill="#ffffff" opacity="0.55" transform="rotate(-28 205 192)"/>
+  <circle cx="300" cy="310" r="16" fill="#ffffff" opacity="0.18"/>
+</svg>

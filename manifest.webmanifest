@@ -1,0 +1,18 @@
+{
+  "name": "Candy Claus",
+  "short_name": "Candy Claus",
+  "description": "A stylized, smooth match-3 game.",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#241b3a",
+  "theme_color": "#241b3a",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
