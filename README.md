@@ -17,7 +17,7 @@ python3 -m http.server 8123
 The game logic core is fully covered by Node's built-in test runner (no packages needed):
 
 ```sh
-npm test        # alias for: node --test test/
+npm test        # alias for: node --test (discovers test/*.test.js)
 ```
 
 ## Architecture
