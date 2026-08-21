@@ -5,6 +5,6 @@
   "type": "module",
   "description": "Mobile-first match-3 game. Zero dependencies — pure ES modules served as static files.",
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test"
   }
 }
