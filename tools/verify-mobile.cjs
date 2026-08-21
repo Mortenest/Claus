@@ -113,6 +113,56 @@ const shotDir = process.argv[3] ?? path.join(os.tmpdir(), 'candy-claus-shots');
     console.log('input/playback not wired yet — skipped the move test');
   }
 
+  // --full: bot-play level 1 to its end dialog, then check unlock + a
+  // collect-goal HUD via a seeded profile.
+  if (process.argv.includes('--full')) {
+    console.log('full mode: playing level 1 to the end…');
+    for (let i = 0; i < 40; i++) {
+      const dialogOpen = await page.evaluate(
+        () => !document.getElementById('dialog-root').hidden,
+      );
+      if (dialogOpen) break;
+      await page.evaluate(() => window.__candy.playHintMove());
+      await page.waitForFunction(() => !window.__candy.isLocked(), { timeout: 20000 });
+      await page.waitForTimeout(550); // allow the end dialog to appear
+    }
+    await page.waitForSelector('.dialog-root.open', { timeout: 5000 });
+    await page.waitForTimeout(1400); // star pops
+    await shot('7-level-end');
+    const title = await page.textContent('.dialog-title');
+    console.log(`level ended with dialog: "${title}"`);
+
+    await page.tap('[data-action="map"]');
+    await page.waitForSelector('#screen-levels.active');
+    await page.waitForTimeout(400);
+    await shot('8-levels-after');
+
+    // Seeded profile: levels 1-3 won → level 4 (collect goal) unlocked.
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'candy-claus/v1',
+        JSON.stringify({
+          version: 1,
+          levels: {
+            1: { stars: 3, bestScore: 20000, attempts: 1 },
+            2: { stars: 2, bestScore: 12000, attempts: 1 },
+            3: { stars: 1, bestScore: 6000, attempts: 1 },
+          },
+          settings: { sound: true, haptics: true },
+        }),
+      );
+    });
+    await page.goto(url, { waitUntil: 'networkidle' });
+    await page.tap('#btn-play');
+    await page.waitForSelector('#screen-levels.active');
+    await page.waitForTimeout(300);
+    await page.tap('.level-cell:nth-child(4)');
+    await page.waitForSelector('#screen-game.active');
+    await page.waitForTimeout(600);
+    await shot('9-collect-goal');
+    console.log('collect goal HUD:', await page.textContent('#hud-goal'));
+  }
+
   await browser.close();
   if (errors.length) {
     console.error('PAGE ERRORS:\n' + errors.join('\n'));
