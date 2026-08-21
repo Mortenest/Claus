@@ -80,8 +80,8 @@ export function createPlayback({ renderer, clock, effects = {} }) {
           ),
         );
       case 'end':
-        fx('onEnd', step);
-        return Promise.resolve();
+        // the juice layer may animate (bonus tick-down) — await it
+        return Promise.resolve(fx('onEnd', step));
       default:
         return Promise.resolve();
     }

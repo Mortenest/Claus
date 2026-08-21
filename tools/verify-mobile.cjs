@@ -78,6 +78,8 @@ const shotDir = process.argv[3] ?? path.join(os.tmpdir(), 'candy-claus-shots');
   if (wired) {
     const before = await page.textContent('#hud-score');
     await page.evaluate(() => window.__candy.playHintMove());
+    await page.waitForTimeout(400);
+    await shot('5-mid-move'); // pops, particles, floating score in flight
     await page.waitForFunction(
       (prev) => document.getElementById('hud-score').textContent !== prev,
       before,
@@ -85,7 +87,7 @@ const shotDir = process.argv[3] ?? path.join(os.tmpdir(), 'candy-claus-shots');
     );
     await page.waitForFunction(() => !window.__candy.isLocked(), { timeout: 15000 });
     await page.waitForTimeout(400);
-    await shot('5-after-move');
+    await shot('6-after-move');
     console.log(`score changed: ${before} → ${await page.textContent('#hud-score')}`);
 
     // Real touch path: tap-tap the two hint cells through pointer events.
