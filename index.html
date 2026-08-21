@@ -4,15 +4,74 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#241b3a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+  <link rel="stylesheet" href="src/web/style.css">
   <title>Candy Claus</title>
-  <style>
-    html, body { margin: 0; height: 100%; background: #241b3a; color: #fff;
-                 font-family: system-ui, sans-serif; display: grid; place-items: center; }
-  </style>
 </head>
 <body>
-  <p>Candy Claus — coming soon 🍬</p>
+  <div id="app">
+
+    <section id="screen-menu" class="screen">
+      <div class="menu-hero">
+        <img class="menu-logo" src="icons/icon.svg" alt="">
+        <h1 class="menu-title">Candy&nbsp;Claus</h1>
+        <p class="menu-tagline" data-str="tagline"></p>
+      </div>
+      <div class="menu-actions">
+        <button id="btn-play" class="btn btn-primary btn-big" data-str="play"></button>
+        <div class="menu-toggles">
+          <button id="btn-sound" class="btn btn-chip" aria-pressed="true"></button>
+          <button id="btn-haptics" class="btn btn-chip" aria-pressed="true"></button>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-levels" class="screen">
+      <header class="bar">
+        <button id="btn-levels-back" class="btn btn-icon" aria-label="Back">‹</button>
+        <h2 class="bar-title" data-str="levels"></h2>
+        <span class="bar-spacer"></span>
+      </header>
+      <div id="level-grid" class="level-grid"></div>
+    </section>
+
+    <section id="screen-game" class="screen">
+      <header class="hud">
+        <div class="hud-block hud-score">
+          <span class="hud-label" data-str="score"></span>
+          <span id="hud-score" class="hud-value">0</span>
+        </div>
+        <div class="hud-block hud-goal">
+          <span class="hud-label" data-str="goal"></span>
+          <span id="hud-goal" class="hud-value hud-goal-value"></span>
+          <div class="hud-progress"><div id="hud-progress-fill"></div></div>
+        </div>
+        <div class="hud-block hud-moves">
+          <span class="hud-label" data-str="moves"></span>
+          <span id="hud-moves" class="hud-value">0</span>
+        </div>
+      </header>
+      <div id="board-wrap" class="board-wrap">
+        <canvas id="board"></canvas>
+        <div id="banner" class="banner" hidden></div>
+      </div>
+      <footer class="bar bar-bottom">
+        <button id="btn-pause" class="btn btn-icon" aria-label="Pause">⏸</button>
+        <span id="hud-level-name" class="bar-title bar-title-dim"></span>
+        <button id="btn-hint" class="btn btn-icon" aria-label="Hint">💡</button>
+      </footer>
+    </section>
+
+    <div id="dialog-root" class="dialog-root" hidden>
+      <div class="dialog-backdrop"></div>
+      <div id="dialog-card" class="dialog-card"></div>
+    </div>
+
+  </div>
+  <script type="module" src="src/web/main.js"></script>
 </body>
 </html>
