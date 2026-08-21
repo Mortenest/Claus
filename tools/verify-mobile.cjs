@@ -74,8 +74,8 @@ const shotDir = process.argv[3] ?? path.join(os.tmpdir(), 'candy-claus-shots');
   await page.waitForTimeout(400);
 
   // Touch-play a move once input+playback are wired (guarded: no-op before).
-  const played = await page.evaluate(() => Boolean(window.__candy?.playHintMove));
-  if (played) {
+  const wired = await page.evaluate(() => Boolean(window.__candy?.playHintMove));
+  if (wired) {
     const before = await page.textContent('#hud-score');
     await page.evaluate(() => window.__candy.playHintMove());
     await page.waitForFunction(
@@ -83,9 +83,30 @@ const shotDir = process.argv[3] ?? path.join(os.tmpdir(), 'candy-claus-shots');
       before,
       { timeout: 8000 },
     );
-    await page.waitForTimeout(1200);
+    await page.waitForFunction(() => !window.__candy.isLocked(), { timeout: 15000 });
+    await page.waitForTimeout(400);
     await shot('5-after-move');
     console.log(`score changed: ${before} → ${await page.textContent('#hud-score')}`);
+
+    // Real touch path: tap-tap the two hint cells through pointer events.
+    const cells = await page.evaluate(() => window.__candy.hintScreenCells());
+    if (cells) {
+      const scoreBefore = await page.textContent('#hud-score');
+      await page.touchscreen.tap(cells.from.x, cells.from.y);
+      await page.waitForTimeout(120);
+      await page.touchscreen.tap(cells.to.x, cells.to.y);
+      await page.waitForFunction(
+        (prev) => document.getElementById('hud-score').textContent !== prev,
+        scoreBefore,
+        { timeout: 8000 },
+      );
+      await page.waitForFunction(() => !window.__candy.isLocked(), { timeout: 15000 });
+      console.log(
+        `tap-tap move: ${scoreBefore} → ${await page.textContent('#hud-score')}`,
+      );
+    } else {
+      console.log('no hint available for the tap-tap test');
+    }
   } else {
     console.log('input/playback not wired yet — skipped the move test');
   }
