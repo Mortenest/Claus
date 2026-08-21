@@ -1,0 +1,14 @@
+name: Debug Claude Auth
+on: workflow_dispatch
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Claude Code
+        run: curl -fsSL https://claude.ai/install.sh | bash
+      - name: Test auth
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          claude -p "Svar kun med ordet OK" --output-format json 2>&1 | head -50 || true
