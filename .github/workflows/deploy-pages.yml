@@ -29,7 +29,7 @@ jobs:
     # was first created), so publishing is pointing gh-pages at tested main.
     # The default workflow token cannot use actions/deploy-pages here: site
     # creation via the API needs admin rights it never gets.
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
     permissions:
