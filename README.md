@@ -3,10 +3,13 @@
 A mobile-first, Candy Crush-style match-3 game. Stylized, smooth, and touch-first —
 built with **zero dependencies**: plain HTML, CSS, and ES modules served as static files.
 
+**Play online:** <https://mortenest.github.io/Claus/> (deployed from `main` by
+the CI & Deploy workflow).
+
 **Play:** swipe (or tap-tap) two neighboring candies to swap them. Match 3+ of a
 color to clear them; match 4 for a striped candy, an L/T for a wrapped candy, 5 in
 a row for a colorbomb. Meet each level's goal — a score target or collecting a
-color — before the moves run out. 12 levels with 1–3 star ratings; progress saves
+color — before the moves run out. 18 levels with 1–3 star ratings; progress saves
 locally.
 
 ## Run locally
