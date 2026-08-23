@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages-${{ github.ref }}
@@ -27,22 +25,15 @@ jobs:
       - run: node --test
 
   deploy:
-    # deploy only from main pushes or a manual dispatch, never from PRs
-    if: github.event_name != 'pull_request'
+    # GitHub Pages serves the gh-pages branch (auto-enabled when that branch
+    # was first created), so publishing is pointing gh-pages at tested main.
+    # The default workflow token cannot use actions/deploy-pages here: site
+    # creation via the API needs admin rights it never gets.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-        with:
-          # create the Pages site on first run (requires a public repo on
-          # free plans; flip visibility in Settings → General if this fails)
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - run: git push --force origin HEAD:gh-pages
