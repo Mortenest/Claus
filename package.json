@@ -1,0 +1,10 @@
+{
+  "name": "candy-claus",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mobile-first match-3 game. Zero dependencies — pure ES modules served as static files.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
