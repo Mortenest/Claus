@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Candy Claus — Character Lab</title>
+<!-- Dev-only mascot design lab: three candidate styles, Meadow+Frost pairs,
+     four moods each. Never loaded by the game; the winning style's draw
+     function gets lifted into src/web/mascot.js. -->
+<style>
+  body {
+    margin: 0; padding: 24px;
+    background: radial-gradient(120% 90% at 50% -10%, #3b2a5e 0%, #241b3a 48%, #1a1230 100%) #1a1230;
+    color: #fff6fb;
+    font-family: ui-rounded, 'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif;
+  }
+  h1 { margin: 0 0 18px; font-size: 1.5rem; }
+  section {
+    background: rgba(20, 12, 40, 0.5);
+    border-radius: 20px;
+    padding: 18px 20px 8px;
+    margin-bottom: 26px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+  section h2 { margin: 0 0 4px; font-size: 1.25rem; }
+  section p { margin: 0 0 10px; color: #b9a8d8; font-size: 0.9rem; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; align-items: flex-end; }
+  .cell { text-align: center; }
+  .cell svg { width: 132px; height: 132px; display: block; }
+  .cell .lbl { font-size: 0.72rem; color: #b9a8d8; letter-spacing: 0.08em; text-transform: uppercase; }
+  .who { font-size: 0.85rem; font-weight: 700; margin: 4px 0 6px; }
+
+  /* Idle life: gentle squash-bob + blink (eyelid group scaleY) */
+  .idle .bob { animation: bob 2.6s ease-in-out infinite; transform-origin: 60px 104px; }
+  @keyframes bob {
+    0%, 100% { transform: scale(1, 1); }
+    50% { transform: scale(1.025, 0.965); }
+  }
+  .idle .eyes { animation: blink 4.2s infinite; transform-origin: center; transform-box: fill-box; }
+  @keyframes blink {
+    0%, 93%, 100% { transform: scaleY(1); }
+    96% { transform: scaleY(0.08); }
+  }
+  .cheer .bob { animation: hop 0.85s cubic-bezier(0.34, 1.56, 0.64, 1) infinite; transform-origin: 60px 104px; }
+  @keyframes hop {
+    0%, 100% { transform: translateY(0) scale(1, 1); }
+    30% { transform: translateY(-9px) scale(0.96, 1.05); }
+    60% { transform: translateY(0) scale(1.05, 0.94); }
+  }
+  .sad .bob { animation: sigh 3.2s ease-in-out infinite; transform-origin: 60px 104px; }
+  @keyframes sigh {
+    0%, 100% { transform: translateY(2px) scale(1.02, 0.97); }
+    50% { transform: translateY(3px) scale(1.03, 0.955); }
+  }
+  .wow .bob { animation: quiver 0.5s ease-in-out infinite; transform-origin: 60px 80px; }
+  @keyframes quiver {
+    0%, 100% { transform: rotate(-1.2deg); }
+    50% { transform: rotate(1.2deg); }
+  }
+</style>
+</head>
+<body>
+<h1>Candy Claus — Character Lab</h1>
+<div id="root"></div>
+
+<script>
+const MEADOW = {
+  base: '#ff7fa3', light: '#ffc9d9', dark: '#d8446f',
+  blush: '#ff5d8f', accent: '#ffd23e', belly: '#ffe3ec',
+};
+const FROST = {
+  base: '#54c7e8', light: '#b5ecff', dark: '#1c85b0',
+  blush: '#8fd8ff', accent: '#dff6ff', belly: '#e6f9ff',
+};
+const INK = '#2a1e33';
+
+/* ---------- shared face pieces (coordinates around given centers) ---------- */
+
+function openEyes(lx, rx, cy, scale = 1) {
+  const eye = (cx) => `
+    <g>
+      <ellipse cx="${cx}" cy="${cy}" rx="${7 * scale}" ry="${8.2 * scale}" fill="${INK}"/>
+      <circle cx="${cx + 2.6 * scale}" cy="${cy - 3 * scale}" r="${2.9 * scale}" fill="#fff"/>
+      <circle cx="${cx - 2 * scale}" cy="${cy + 3 * scale}" r="${1.3 * scale}" fill="#fff" opacity="0.85"/>
+    </g>`;
+  return `<g class="eyes">${eye(lx)}${eye(rx)}</g>`;
+}
+
+function happyEyes(lx, rx, cy) {
+  const arc = (cx) =>
+    `<path d="M ${cx - 7} ${cy + 2} Q ${cx} ${cy - 7} ${cx + 7} ${cy + 2}"
+       fill="none" stroke="${INK}" stroke-width="3.4" stroke-linecap="round"/>`;
+  return arc(lx) + arc(rx);
+}
+
+function sadEyes(lx, rx, cy) {
+  // sad brows slope UP toward the nose (inner end raised)
+  const eye = (cx, flip) => `
+    <ellipse cx="${cx}" cy="${cy + 1}" rx="5.6" ry="6" fill="${INK}"/>
+    <circle cx="${cx + 2}" cy="${cy - 1}" r="2" fill="#fff"/>
+    <path d="M ${cx - 7 * flip} ${cy - 6.5} L ${cx + 5 * flip} ${cy - 10.5}"
+      stroke="${INK}" stroke-width="2.6" stroke-linecap="round"/>`;
+  return eye(lx, 1) + eye(rx, -1);
+}
+
+function mouth(kind, cx, cy) {
+  if (kind === 'smile') {
+    return `<path d="M ${cx - 6.5} ${cy} Q ${cx} ${cy + 5.5} ${cx + 6.5} ${cy}"
+      fill="none" stroke="${INK}" stroke-width="2.6" stroke-linecap="round"/>`;
+  }
+  if (kind === 'grin') {
+    return `<path d="M ${cx - 9} ${cy - 1} Q ${cx} ${cy + 11} ${cx + 9} ${cy - 1} Z"
+      fill="${INK}"/>
+      <path d="M ${cx - 5} ${cy + 4.5} Q ${cx} ${cy + 7.5} ${cx + 5} ${cy + 4.5} L ${cx + 3.4} ${cy + 6.8} Q ${cx} ${cy + 8.6} ${cx - 3.4} ${cy + 6.8} Z"
+      fill="#ff8fae"/>`;
+  }
+  if (kind === 'o') {
+    return `<ellipse cx="${cx}" cy="${cy + 2}" rx="4.6" ry="5.6" fill="${INK}"/>`;
+  }
+  // frown
+  return `<path d="M ${cx - 6} ${cy + 4} Q ${cx} ${cy - 2} ${cx + 6} ${cy + 4}"
+    fill="none" stroke="${INK}" stroke-width="2.6" stroke-linecap="round"/>`;
+}
+
+function blush(p, lx, rx, cy) {
+  return `
+    <ellipse cx="${lx}" cy="${cy}" rx="5.6" ry="3.4" fill="${p.blush}" opacity="0.5"/>
+    <ellipse cx="${rx}" cy="${cy}" rx="5.6" ry="3.4" fill="${p.blush}" opacity="0.5"/>`;
+}
+
+function face(p, mood, cy = 60, spread = 15, cx = 60) {
+  const lx = cx - spread;
+  const rx = cx + spread;
+  if (mood === 'cheer') {
+    return happyEyes(lx, rx, cy) + blush(p, lx - 4, rx + 4, cy + 10) + mouth('grin', cx, cy + 9);
+  }
+  if (mood === 'wow') {
+    return openEyes(lx, rx, cy, 1.3) + blush(p, lx - 4, rx + 4, cy + 11) + mouth('o', cx, cy + 12);
+  }
+  if (mood === 'sad') {
+    return sadEyes(lx, rx, cy + 1) + mouth('frown', cx, cy + 12) +
+      `<path d="M ${rx + 9} ${cy + 3} q 3.6 5.4 0 8.4 q -3.6 -3 0 -8.4"
+         fill="#9adcff" opacity="0.95"/>`;
+  }
+  return openEyes(lx, rx, cy) + blush(p, lx - 5, rx + 5, cy + 10) + mouth('smile', cx, cy + 11);
+}
+
+function sparkles(color) {
+  const s = (x, y, r) =>
+    `<path d="M ${x} ${y - r} L ${x + r * 0.35} ${y - r * 0.35} L ${x + r} ${y} L ${x + r * 0.35} ${y + r * 0.35}
+       L ${x} ${y + r} L ${x - r * 0.35} ${y + r * 0.35} L ${x - r} ${y} L ${x - r * 0.35} ${y - r * 0.35} Z"
+       fill="${color}" opacity="0.9"/>`;
+  return s(22, 30, 6) + s(99, 24, 4.5) + s(103, 46, 3);
+}
+
+let gid = 0;
+function bodyGradient(p) {
+  const id = `g${gid++}`;
+  return {
+    id,
+    def: `<linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${p.light}"/>
+      <stop offset="0.55" stop-color="${p.base}"/>
+      <stop offset="1" stop-color="${p.dark}"/>
+    </linearGradient>`,
+  };
+}
+
+const svgWrap = (mood, inner) =>
+  `<svg viewBox="0 0 120 120" class="${mood}"><g class="bob">${inner}</g></svg>`;
+
+/* ---------- Candidate A: Gumdrop-væsner (v2 — the chosen ones) ---------- */
+
+function starEyes(lx, rx, cy) {
+  const star = (cx) => {
+    let d = '';
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 === 0 ? 8.6 : 3.9;
+      const a = (i * Math.PI) / 5 - Math.PI / 2;
+      d += `${i === 0 ? 'M' : 'L'} ${(cx + Math.cos(a) * r).toFixed(1)} ${(cy + Math.sin(a) * r).toFixed(1)} `;
+    }
+    return `<path d="${d}Z" fill="#ffd23e" stroke="#d1a10a" stroke-width="1.6" stroke-linejoin="round"/>
+      <circle cx="${cx + 2}" cy="${cy - 2.5}" r="1.6" fill="#fff" opacity="0.9"/>`;
+  };
+  return star(lx) + star(rx);
+}
+
+function gumdropEyes(lx, rx, cy, scale = 1) {
+  const eye = (cx, flip) => `
+    <g>
+      <ellipse cx="${cx}" cy="${cy}" rx="${8 * scale}" ry="${9 * scale}" fill="#241633"/>
+      <ellipse cx="${cx}" cy="${cy + 0.8 * scale}" rx="${6.4 * scale}" ry="${7.4 * scale}" fill="#3a2447"/>
+      <circle cx="${cx + 2.8 * scale}" cy="${cy - 3.2 * scale}" r="${3.1 * scale}" fill="#fff"/>
+      <circle cx="${cx - 2.4 * scale}" cy="${cy + 2.6 * scale}" r="${1.4 * scale}" fill="#fff" opacity="0.85"/>
+      <path d="M ${cx - 4.6 * scale} ${cy + 6.4 * scale} Q ${cx} ${cy + 8.2 * scale} ${cx + 4.6 * scale} ${cy + 6.4 * scale}"
+        fill="none" stroke="#fff" stroke-width="${1.1 * scale}" opacity="0.35" stroke-linecap="round"/>
+      <path d="M ${cx + 7.6 * scale * flip} ${cy - 4 * scale} q ${3 * flip} -1 ${4.4 * flip} -3.2"
+        fill="none" stroke="${INK}" stroke-width="2" stroke-linecap="round"/>
+      <path d="M ${cx + 6.6 * scale * flip} ${cy - 6.6 * scale} q ${2.4 * flip} -1.4 ${3.4 * flip} -3.6"
+        fill="none" stroke="${INK}" stroke-width="1.7" stroke-linecap="round" opacity="0.85"/>
+    </g>`;
+  return `<g class="eyes">${eye(lx, -1)}${eye(rx, 1)}</g>`;
+}
+
+function brows(lx, rx, cy, mood) {
+  const brow = (cx, flip) => {
+    if (mood === 'sad') {
+      return `<path d="M ${cx - 6 * flip} ${cy - 13} Q ${cx} ${cy - 17} ${cx + 6 * flip} ${cy - 16.5}"
+        fill="none" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/>`;
+    }
+    const lift = mood === 'cheer' || mood === 'wow' || mood === 'starstruck' ? 4 : 0;
+    return `<path d="M ${cx - 6 * flip} ${cy - 14 - lift} Q ${cx} ${cy - 17.5 - lift} ${cx + 6 * flip} ${cy - 15 - lift}"
+      fill="none" stroke="${INK}" stroke-width="2.2" stroke-linecap="round" opacity="0.75"/>`;
+  };
+  return brow(lx, 1) + brow(rx, -1);
+}
+
+function gumdropBlush(p, lx, rx, cy) {
+  const cheek = (cx) => `
+    <ellipse cx="${cx}" cy="${cy}" rx="6.2" ry="3.8" fill="${p.blush}" opacity="0.55"/>
+    <path d="M ${cx - 3} ${cy - 1} l 2 -1.4 M ${cx + 1} ${cy - 1.6} l 2 -1.4"
+      stroke="#fff" stroke-width="1.2" stroke-linecap="round" opacity="0.75"/>`;
+  return cheek(lx) + cheek(rx);
+}
+
+function gumdropFace(p, mood) {
+  const cy = 60;
+  const lx = 45;
+  const rx = 75;
+  let eyes;
+  let mouthPart;
+  if (mood === 'cheer') {
+    eyes = happyEyes(lx, rx, cy);
+    mouthPart = mouth('grin', 60, cy + 9);
+  } else if (mood === 'wow') {
+    eyes = gumdropEyes(lx, rx, cy, 1.22);
+    mouthPart = mouth('o', 60, cy + 12);
+  } else if (mood === 'starstruck') {
+    eyes = starEyes(lx, rx, cy);
+    mouthPart = mouth('grin', 60, cy + 10);
+  } else if (mood === 'sad') {
+    eyes = sadEyes(lx, rx, cy + 1);
+    mouthPart = mouth('frown', 60, cy + 12) +
+      `<path d="M ${rx + 10} ${cy + 3} q 3.6 5.4 0 8.4 q -3.6 -3 0 -8.4" fill="#9adcff" opacity="0.95"/>`;
+    return brows(lx, rx, cy, mood) + eyes + mouthPart;
+  } else {
+    eyes = gumdropEyes(lx, rx, cy);
+    mouthPart = mouth('smile', 60, cy + 11);
+  }
+  return brows(lx, rx, cy, mood) + eyes + gumdropBlush(p, lx - 11, rx + 11, cy + 9) + mouthPart;
+}
+
+function charA(p, mood, frost) {
+  const g = bodyGradient(p);
+  const glowId = `glow${gid++}`;
+  const droop = mood === 'sad' ? 'transform="translate(0 4) rotate(-3 60 90)"' : '';
+  const armUp = mood === 'cheer' || mood === 'wow' || mood === 'starstruck';
+  const arm = (side) => {
+    const flip = side === 'l' ? 1 : -1;
+    if (armUp) {
+      const x = side === 'l' ? 17 : 91;
+      return `<rect x="${x}" y="26" width="12" height="26" rx="6" fill="${p.base}"
+        stroke="${p.dark}" stroke-width="2.5" transform="rotate(${-32 * flip} ${x + 6} 50)"/>`;
+    }
+    const rot = mood === 'sad' ? 30 * flip : 18 * flip;
+    const x = side === 'l' ? 12 : 96;
+    return `<rect x="${x}" y="62" width="12" height="24" rx="6" fill="${p.base}"
+      stroke="${p.dark}" stroke-width="2.5" transform="rotate(${rot} ${x + 6} 66)"/>`;
+  };
+  const foot = (cx) => `
+    <ellipse cx="${cx}" cy="103" rx="9.5" ry="5.5" fill="${p.base}" stroke="${p.dark}" stroke-width="2.4"/>
+    <path d="M ${cx - 3} 99.5 q 0 3 0 5 M ${cx + 3} 99.5 q 0 3 0 5"
+      stroke="${p.dark}" stroke-width="1.6" stroke-linecap="round" opacity="0.65"/>`;
+  const speckles = [
+    [34, 62], [30, 76], [41, 90], [83, 55], [90, 70], [80, 92], [66, 97], [51, 30], [73, 33],
+  ].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.15" fill="#fff" opacity="0.3"/>`).join('');
+  const topper = frost
+    ? `<g stroke="${p.accent}" stroke-width="2.4" stroke-linecap="round" transform="translate(60 12)">
+        <line x1="0" y1="-7" x2="0" y2="7"/><line x1="-6" y1="-3.6" x2="6" y2="3.6"/>
+        <line x1="-6" y1="3.6" x2="6" y2="-3.6"/><circle cx="0" cy="0" r="2.2" fill="${p.accent}" stroke="none"/>
+        <circle cx="0" cy="-8.4" r="1.3" fill="${p.accent}" stroke="none"/>
+        <circle cx="7.3" cy="4.2" r="1.3" fill="${p.accent}" stroke="none"/>
+        <circle cx="-7.3" cy="4.2" r="1.3" fill="${p.accent}" stroke="none"/>
+      </g>`
+    : `<path d="M 60 17 Q 57 10 60 5" stroke="#7a9c3e" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+       <path d="M 60 8 C 66 2 76 3 79 9 C 72 13 63 13 60 8 Z"
+         fill="#8fd964" stroke="#5d8f2e" stroke-width="2.2" stroke-linejoin="round"/>
+       <path d="M 62 9 Q 69 8 75 8.6" stroke="#5d8f2e" stroke-width="1.4" fill="none" opacity="0.7"/>`;
+  const bellyDeco = frost
+    ? `<circle cx="53" cy="86" r="1.6" fill="${p.dark}" opacity="0.25"/>
+       <circle cx="67" cy="90" r="1.6" fill="${p.dark}" opacity="0.25"/>
+       <circle cx="60" cy="82" r="1.6" fill="${p.dark}" opacity="0.25"/>`
+    : `<path d="M 60 84 c -2.4 -2.6 -6.4 -0.4 -4.6 2.6 c 1.2 2 3.4 3 4.6 4.4 c 1.2 -1.4 3.4 -2.4 4.6 -4.4 c 1.8 -3 -2.2 -5.2 -4.6 -2.6 Z"
+         fill="${p.blush}" opacity="0.4"/>`;
+  return `<svg viewBox="0 0 120 120" class="${mood}">
+    <defs>
+      ${g.def}
+      <radialGradient id="${glowId}" cx="0.42" cy="0.3" r="0.75">
+        <stop offset="0" stop-color="#ffffff" stop-opacity="0.5"/>
+        <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.12"/>
+        <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <ellipse cx="60" cy="108" rx="31" ry="5" fill="#0a0518" opacity="0.3"/>
+    <g class="bob"><g ${droop}>
+      ${arm('l')}${arm('r')}
+      ${foot(46)}${foot(74)}
+      <path d="M 60 15 C 31 19 20 52 20 77 C 20 98 39 105 60 105 C 81 105 100 98 100 77 C 100 52 89 19 60 15 Z"
+        fill="url(#${g.id})" stroke="${p.dark}" stroke-width="3"/>
+      <path d="M 60 15 C 31 19 20 52 20 77 C 20 98 39 105 60 105 C 81 105 100 98 100 77 C 100 52 89 19 60 15 Z"
+        fill="url(#${glowId})"/>
+      <ellipse cx="60" cy="88" rx="24" ry="12" fill="${p.belly}" opacity="0.6"/>
+      ${bellyDeco}
+      ${speckles}
+      <ellipse cx="41" cy="33" rx="9" ry="15" fill="#fff" opacity="0.45" transform="rotate(-24 41 33)"/>
+      <path d="M 84 30 Q 92 40 94 52" fill="none" stroke="${p.light}" stroke-width="3" opacity="0.5" stroke-linecap="round"/>
+      ${topper}
+      ${gumdropFace(p, mood)}
+    </g></g>
+    ${mood === 'wow' || mood === 'starstruck' ? sparkles(p.accent) : ''}
+  </svg>`;
+}
+
+/* ---------- Candidate B: Wrapper-venner ---------- */
+
+function charB(p, mood, frost) {
+  const g = bodyGradient(p);
+  const droop = mood === 'sad' ? 'transform="translate(0 3)"' : '';
+  const up = mood === 'cheer' || mood === 'wow';
+  const twist = (side) => {
+    const flip = side === 'l' ? 1 : -1;
+    const cx = side === 'l' ? 27 : 93;
+    const rot = mood === 'sad' ? 24 * flip : up ? -30 * flip : 0;
+    return `<g transform="rotate(${rot} ${cx} 66)">
+      <path d="M ${cx} 66 L ${cx - 20 * flip} 48 Q ${cx - 12 * flip} 66 ${cx - 20 * flip} 84 Z"
+        fill="${p.base}" stroke="${p.dark}" stroke-width="2.6" stroke-linejoin="round"/>
+      <line x1="${cx - 6 * flip}" y1="60" x2="${cx - 13 * flip}" y2="55"
+        stroke="${p.dark}" stroke-width="1.8" opacity="0.55"/>
+      <line x1="${cx - 6 * flip}" y1="72" x2="${cx - 13 * flip}" y2="77"
+        stroke="${p.dark}" stroke-width="1.8" opacity="0.55"/>
+    </g>`;
+  };
+  return svgWrap(mood, `
+    <defs>${g.def}</defs>
+    <g ${droop}>
+      ${twist('l')}${twist('r')}
+      <circle cx="60" cy="66" r="35" fill="url(#${g.id})" stroke="${p.dark}" stroke-width="3"/>
+      <path d="M 60 31 A 35 35 0 0 1 95 66" fill="none" stroke="${frost ? p.accent : '#ffd1db'}"
+        stroke-width="7" stroke-linecap="round" opacity="0.8"/>
+      <ellipse cx="46" cy="46" rx="9" ry="6" fill="#fff" opacity="0.5" transform="rotate(-28 46 46)"/>
+      ${face(p, mood, 62, 14)}
+    </g>
+    ${mood === 'wow' ? sparkles(p.accent) : ''}
+  `);
+}
+
+/* ---------- Candidate C: Slik-dyr ---------- */
+
+function charC(p, mood, frost) {
+  return frost ? penguin(p, mood) : butterfly(p, mood);
+}
+
+function butterfly(p, mood) {
+  const g = bodyGradient(p);
+  const up = mood === 'cheer' || mood === 'wow';
+  const wingRot = mood === 'sad' ? 16 : up ? -14 : 0;
+  const wing = (flip) => `
+    <g transform="rotate(${wingRot * flip} 60 62)">
+      <path d="M 60 50 C ${60 - 36 * flip} 24 ${60 - 50 * flip} 46 ${60 - 36 * flip} 62
+               C ${60 - 50 * flip} 74 ${60 - 34 * flip} 92 60 72 Z"
+        fill="${p.base}" stroke="${p.dark}" stroke-width="2.6" stroke-linejoin="round" opacity="0.95"/>
+      <circle cx="${60 - 30 * flip}" cy="48" r="5" fill="${p.accent}" opacity="0.85"/>
+      <circle cx="${60 - 28 * flip}" cy="72" r="3.4" fill="${p.belly}" opacity="0.9"/>
+    </g>`;
+  const droop = mood === 'sad' ? 'transform="translate(0 4)"' : '';
+  return svgWrap(mood, `
+    <defs>${g.def}</defs>
+    <g ${droop}>
+      ${wing(1)}${wing(-1)}
+      <path d="M 52 34 Q 44 22 37 18" fill="none" stroke="${p.dark}" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M 68 34 Q 76 22 83 18" fill="none" stroke="${p.dark}" stroke-width="2.4" stroke-linecap="round"/>
+      <circle cx="37" cy="17" r="4.5" fill="${p.accent}" stroke="${p.dark}" stroke-width="2"/>
+      <circle cx="83" cy="17" r="4.5" fill="${p.accent}" stroke="${p.dark}" stroke-width="2"/>
+      <rect x="44" y="34" width="32" height="66" rx="16" fill="url(#${g.id})" stroke="${p.dark}" stroke-width="3"/>
+      <path d="M 45.5 82 h 29 M 45.5 92 h 29" stroke="${p.belly}" stroke-width="6" opacity="0.7" stroke-linecap="round"/>
+      <ellipse cx="52" cy="42" rx="5" ry="8" fill="#fff" opacity="0.4" transform="rotate(-18 52 42)"/>
+      ${face(p, mood, 54, 8.5)}
+    </g>
+    ${mood === 'wow' ? sparkles(p.accent) : ''}
+  `);
+}
+
+function penguin(p, mood) {
+  const g = bodyGradient(p);
+  const up = mood === 'cheer' || mood === 'wow';
+  const flipRot = mood === 'sad' ? 18 : up ? -52 : 8;
+  const flipper = (flip) => {
+    const cx = flip === 1 ? 24 : 96;
+    return `<ellipse cx="${cx}" cy="72" rx="7" ry="16" fill="${p.dark}"
+      transform="rotate(${flipRot * flip} ${cx} 60)"/>`;
+  };
+  const droop = mood === 'sad' ? 'transform="translate(0 4) rotate(-2 60 90)"' : '';
+  return svgWrap(mood, `
+    <defs>${g.def}</defs>
+    <g ${droop}>
+      ${flipper(1)}${flipper(-1)}
+      <ellipse cx="47" cy="105" rx="9" ry="4.5" fill="#ff9838"/>
+      <ellipse cx="73" cy="105" rx="9" ry="4.5" fill="#ff9838"/>
+      <path d="M 60 14 C 34 14 26 44 26 72 C 26 96 41 105 60 105 C 79 105 94 96 94 72 C 94 44 86 14 60 14 Z"
+        fill="url(#${g.id})" stroke="${p.dark}" stroke-width="3"/>
+      <path d="M 60 34 C 45 34 38 56 38 76 C 38 94 48 100 60 100 C 72 100 82 94 82 76 C 82 56 75 34 60 34 Z"
+        fill="${p.belly}" opacity="0.92"/>
+      <ellipse cx="44" cy="26" rx="8" ry="12" fill="#fff" opacity="0.35" transform="rotate(-22 44 26)"/>
+      <path d="M 54 68 L 66 68 L 60 76 Z" fill="#ff9838" stroke="#e07414" stroke-width="1.6" stroke-linejoin="round"/>
+      ${face(p, mood, 51, 13)}
+      <path d="M 38 84 q 22 10 44 0 l 0 8 q -22 9 -44 0 Z" fill="${p.blush}" opacity="0.9"/>
+      <rect x="72" y="86" width="9" height="18" rx="4" fill="${p.blush}" opacity="0.9"/>
+    </g>
+    ${mood === 'wow' ? sparkles(p.accent) : ''}
+  `);
+}
+
+/* ---------- render the lab ---------- */
+
+const CANDIDATES = [
+  { key: 'A', name: 'A · Gumdrop-væsner', desc: 'Runde slik-blobs med store øjne — tættest på Candy Crush.', fn: charA },
+  { key: 'B', name: 'B · Wrapper-venner', desc: 'Bolsjer med ansigt — twist-armene er ører, arme og humør.', fn: charB },
+  { key: 'C', name: 'C · Slik-dyr', desc: 'Sommerfugle-bolsje til Candy Meadow, gelé-pingvin til Frost Night.', fn: charC },
+];
+const MOODS = ['idle', 'cheer', 'wow', 'sad'];
+const MOODS_A = ['idle', 'cheer', 'wow', 'starstruck', 'sad'];
+
+const root = document.getElementById('root');
+for (const cand of CANDIDATES) {
+  const section = document.createElement('section');
+  section.id = `cand-${cand.key}`;
+  let html = `<h2>${cand.name}</h2><p>${cand.desc}</p>`;
+  for (const [label, palette, frost] of [['Candy Meadow', MEADOW, false], ['Frost Night', FROST, true]]) {
+    html += `<div class="who">${label}</div><div class="row">`;
+    for (const mood of cand.key === 'A' ? MOODS_A : MOODS) {
+      html += `<div class="cell">${cand.fn(palette, mood, frost)}<div class="lbl">${mood}</div></div>`;
+    }
+    html += `</div>`;
+  }
+  section.innerHTML = html;
+  root.append(section);
+}
+</script>
+</body>
+</html>

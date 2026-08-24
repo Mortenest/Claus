@@ -24,6 +24,7 @@ import { createInput } from './input.js';
 import { createParticles } from './particles.js';
 import { createAudio } from './audio.js';
 import { createHaptics } from './haptics.js';
+import { mountMascot } from './mascot.js';
 
 /** Testing switch: show every level unlocked (progression logic stays). */
 const UNLOCK_ALL = true;
@@ -41,6 +42,10 @@ let paused = false;
 
 const audio = createAudio(() => progress.settings.sound);
 const haptics = createHaptics(() => progress.settings.haptics);
+
+mountMascot(document.getElementById('mascot-menu-meadow'), 'meadow');
+mountMascot(document.getElementById('mascot-menu-frost'), 'frost');
+const gameMascot = mountMascot(document.getElementById('mascot-game'), 'meadow');
 
 const screens = createScreens({
   onPlay: showLevels,
@@ -87,11 +92,15 @@ const effects = {
   onReject() {
     audio.sfx('reject');
     haptics.buzz('reject');
+    gameMascot.react('reject');
   },
   onClearStep(step) {
     hud.score = step.scoreTotal;
     hud.goal = step.goal;
     screens.setHud(hudState());
+
+    if (step.cascade >= 1) gameMascot.react('cascade');
+    else if (step.cleared.some((e) => e.cause !== 'match')) gameMascot.react('blast');
 
     const specials = step.cleared.filter((e) => e.kind !== 'normal').length + step.created.length;
     renderer.state.shake = {
@@ -145,6 +154,7 @@ const effects = {
     audio.sfx('special');
     haptics.buzz('special');
     particles.flash('ring', { pos: created.pos });
+    gameMascot.react('special');
   },
   onFallLand() {
     audio.sfx('land');
@@ -156,6 +166,7 @@ const effects = {
   onFinaleStart() {
     screens.showBanner(STRINGS.sweetFinish);
     haptics.buzz('special');
+    gameMascot.react('finale');
   },
   onFinaleConvert(conv, _visual, i) {
     hud.movesLeft = Math.max(0, hud.movesLeft - 1);
@@ -164,6 +175,7 @@ const effects = {
     particles.flash('ring', { pos: conv.pos });
   },
   onEnd(step) {
+    gameMascot.react(step.outcome);
     if (step.outcome === 'won') {
       audio.sfx('win');
       haptics.buzz('win');
@@ -230,6 +242,7 @@ function startLevel(id) {
   paused = false;
   clock.timeScale = 1;
   applyTheme(id);
+  gameMascot.setTheme(worldOf(id).theme);
   const attempt = bumpAttempt(id);
   game = new Game(def, attemptSeed(def, attempt));
   const board = game.board;
@@ -263,6 +276,7 @@ function handleGameEnd(endStep) {
   const session = game;
   setTimeout(() => {
     if (game !== session) return; // player already left the game screen
+    const theme = worldOf(def.id).theme;
     if (endStep.outcome === 'won') {
       screens.showDialog('won', {
         stars: endStep.stars,
@@ -271,12 +285,13 @@ function handleGameEnd(endStep) {
         levelId: def.id,
         levelName: def.name,
         hasNext: def.id < LEVELS.length,
+        theme,
       });
       for (let i = 0; i < endStep.stars; i++) {
         setTimeout(() => audio.sfx('star', { pitch: 1 + i * 0.26 }), 400 + i * 300);
       }
     } else {
-      screens.showDialog('lost', { score: endStep.score });
+      screens.showDialog('lost', { score: endStep.score, theme });
     }
   }, 420);
 }
