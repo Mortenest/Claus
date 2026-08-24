@@ -21,6 +21,8 @@ export function createRenderer(canvas, sprites) {
     selection: null, // {r, c} | null
     shake: { amp: 0, until: 0 },
     isHole: () => false, // shaped boards: cells cut out of the board
+    glint: null, // { row, col, start } — idle shine sweep over one candy
+    nextGlintAt: 0,
   };
 
   function setBoardSize(rows, cols, isHole = null) {
@@ -113,6 +115,14 @@ export function createRenderer(canvas, sprites) {
       ctx.stroke();
     }
 
+    // idle life: every few seconds a shine sweeps across one random candy
+    if (now >= state.nextGlintAt && visuals.size > 0) {
+      const all = [...visuals.values()];
+      const pick = all[(Math.random() * all.length) | 0];
+      state.glint = { row: pick.row, col: pick.col, start: now };
+      state.nextGlintAt = now + 2800 + Math.random() * 2200;
+    }
+
     const size = Math.round(cell * state.dpr);
     for (const v of visuals.values()) {
       const sprite = sprites.tile(v.color, v.kind, size);
@@ -130,6 +140,25 @@ export function createRenderer(canvas, sprites) {
         ctx.translate(x, y);
         ctx.scale(v.scaleX, v.scaleY);
         ctx.drawImage(sprite, -cell / 2, -cell / 2, cell, cell);
+        ctx.restore();
+      }
+    }
+
+    if (state.glint) {
+      const t = (now - state.glint.start) / 450;
+      if (t >= 1) {
+        state.glint = null;
+      } else {
+        const { x, y } = cellCenter(state.glint.row, state.glint.col);
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(x - cell * 0.42, y - cell * 0.42, cell * 0.84, cell * 0.84, cell * 0.28);
+        ctx.clip();
+        ctx.globalAlpha = Math.sin(Math.PI * t) * 0.5;
+        ctx.translate(x + (t * 2 - 1) * cell * 0.9, y);
+        ctx.rotate(-0.7);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-cell * 0.09, -cell, cell * 0.18, cell * 2);
         ctx.restore();
       }
     }

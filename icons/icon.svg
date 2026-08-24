@@ -4,25 +4,37 @@
       <stop offset="0" stop-color="#3b2a5e"/>
       <stop offset="1" stop-color="#1d1533"/>
     </linearGradient>
-    <linearGradient id="candy" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ff6b8a"/>
-      <stop offset="1" stop-color="#e83e5e"/>
-    </linearGradient>
-    <linearGradient id="wrap" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ff8ba3"/>
-      <stop offset="1" stop-color="#d63456"/>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffc9d9"/>
+      <stop offset="0.55" stop-color="#ff7fa3"/>
+      <stop offset="1" stop-color="#d8446f"/>
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <!-- wrapper twists -->
-  <path d="M118 256 L58 206 Q76 256 58 306 Z" fill="url(#wrap)" stroke="#a8203e" stroke-width="10" stroke-linejoin="round"/>
-  <path d="M394 256 L454 206 Q436 256 454 306 Z" fill="url(#wrap)" stroke="#a8203e" stroke-width="10" stroke-linejoin="round"/>
-  <!-- candy body -->
-  <circle cx="256" cy="256" r="148" fill="url(#candy)" stroke="#a8203e" stroke-width="12"/>
-  <!-- swirl -->
-  <path d="M256 118 A138 138 0 0 1 394 256" fill="none" stroke="#ffd1db" stroke-width="26" stroke-linecap="round" opacity="0.85"/>
-  <path d="M256 394 A138 138 0 0 1 118 256" fill="none" stroke="#c22a4c" stroke-width="26" stroke-linecap="round" opacity="0.7"/>
-  <!-- gloss -->
-  <ellipse cx="205" cy="192" rx="56" ry="38" fill="#ffffff" opacity="0.55" transform="rotate(-28 205 192)"/>
-  <circle cx="300" cy="310" r="16" fill="#ffffff" opacity="0.18"/>
+  <!-- the meadow gumdrop, front and center -->
+  <g transform="translate(256 268) scale(3.4) translate(-60 -62)">
+    <ellipse cx="60" cy="108" rx="31" ry="5" fill="#0a0518" opacity="0.35"/>
+    <rect x="12" y="62" width="12" height="24" rx="6" fill="#ff7fa3" stroke="#d8446f" stroke-width="2.5" transform="rotate(18 18 66)"/>
+    <rect x="96" y="62" width="12" height="24" rx="6" fill="#ff7fa3" stroke="#d8446f" stroke-width="2.5" transform="rotate(-18 102 66)"/>
+    <ellipse cx="46" cy="103" rx="9.5" ry="5.5" fill="#ff7fa3" stroke="#d8446f" stroke-width="2.4"/>
+    <ellipse cx="74" cy="103" rx="9.5" ry="5.5" fill="#ff7fa3" stroke="#d8446f" stroke-width="2.4"/>
+    <path d="M 60 15 C 31 19 20 52 20 77 C 20 98 39 105 60 105 C 81 105 100 98 100 77 C 100 52 89 19 60 15 Z"
+      fill="url(#body)" stroke="#d8446f" stroke-width="3"/>
+    <ellipse cx="60" cy="88" rx="24" ry="12" fill="#ffe3ec" opacity="0.6"/>
+    <path d="M 60 84 c -2.4 -2.6 -6.4 -0.4 -4.6 2.6 c 1.2 2 3.4 3 4.6 4.4 c 1.2 -1.4 3.4 -2.4 4.6 -4.4 c 1.8 -3 -2.2 -5.2 -4.6 -2.6 Z"
+      fill="#ff5d8f" opacity="0.4"/>
+    <ellipse cx="41" cy="33" rx="9" ry="15" fill="#fff" opacity="0.45" transform="rotate(-24 41 33)"/>
+    <path d="M 60 17 Q 57 10 60 5" stroke="#7a9c3e" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+    <path d="M 60 8 C 66 2 76 3 79 9 C 72 13 63 13 60 8 Z" fill="#8fd964" stroke="#5d8f2e" stroke-width="2.2" stroke-linejoin="round"/>
+    <!-- face -->
+    <ellipse cx="45" cy="60" rx="8" ry="9" fill="#241633"/>
+    <ellipse cx="75" cy="60" rx="8" ry="9" fill="#241633"/>
+    <circle cx="47.8" cy="56.8" r="3.1" fill="#fff"/>
+    <circle cx="77.8" cy="56.8" r="3.1" fill="#fff"/>
+    <circle cx="42.6" cy="62.6" r="1.4" fill="#fff" opacity="0.85"/>
+    <circle cx="72.6" cy="62.6" r="1.4" fill="#fff" opacity="0.85"/>
+    <ellipse cx="34" cy="69" rx="6.2" ry="3.8" fill="#ff5d8f" opacity="0.55"/>
+    <ellipse cx="86" cy="69" rx="6.2" ry="3.8" fill="#ff5d8f" opacity="0.55"/>
+    <path d="M 53.5 71 Q 60 76.5 66.5 71" fill="none" stroke="#2a1e33" stroke-width="2.6" stroke-linecap="round"/>
+  </g>
 </svg>

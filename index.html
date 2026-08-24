@@ -17,7 +17,10 @@
 
     <section id="screen-menu" class="screen">
       <div class="menu-hero">
-        <img class="menu-logo" src="icons/icon.svg" alt="">
+        <div class="menu-mascots">
+          <div id="mascot-menu-frost"></div>
+          <div id="mascot-menu-meadow"></div>
+        </div>
         <h1 class="menu-title">Candy&nbsp;Claus</h1>
         <p class="menu-tagline" data-str="tagline"></p>
       </div>
@@ -56,11 +59,15 @@
         </div>
       </header>
       <div id="board-wrap" class="board-wrap">
+        <div class="ambient" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
         <canvas id="board"></canvas>
         <div id="banner" class="banner" hidden></div>
       </div>
       <footer class="bar bar-bottom">
         <button id="btn-pause" class="btn btn-icon" aria-label="Pause">⏸</button>
+        <div id="mascot-game" class="mascot-dock"></div>
         <span id="hud-level-name" class="bar-title bar-title-dim"></span>
         <button id="btn-hint" class="btn btn-icon" aria-label="Hint">💡</button>
       </footer>
