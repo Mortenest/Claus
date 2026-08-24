@@ -31,8 +31,6 @@ export const SCORING = Object.freeze({
   BLAST_TILE: 40,
   /** Awarded once per special candy created. */
   SPECIAL_CREATE: 60,
-  /** Early-win bonus per unspent move. */
-  WIN_MOVE_BONUS: 150,
 });
 
 /**

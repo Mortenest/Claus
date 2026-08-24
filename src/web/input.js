@@ -32,7 +32,7 @@ export function createInput(canvas, renderer, handlers) {
     if (handlers.isLocked()) return;
     const { x, y } = localPoint(e);
     const cell = renderer.cellAt(x, y);
-    if (!cell) return;
+    if (!cell || renderer.state.isHole(cell.r, cell.c)) return;
     canvas.setPointerCapture(e.pointerId);
     press = { x, y, cell, consumed: false };
 
@@ -56,7 +56,10 @@ export function createInput(canvas, renderer, handlers) {
       c: press.cell.c + (horizontal ? Math.sign(dx) : 0),
     };
     press.consumed = true;
-    if (renderer.cellAt((to.c + 0.5) * renderer.state.cell, (to.r + 0.5) * renderer.state.cell)) {
+    const { rows, cols } = renderer.state;
+    const onBoard =
+      to.r >= 0 && to.r < rows && to.c >= 0 && to.c < cols && !renderer.state.isHole(to.r, to.c);
+    if (onBoard) {
       emitMove(press.cell, to);
     } else {
       setSelection(null);
