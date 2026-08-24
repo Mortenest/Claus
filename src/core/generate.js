@@ -18,9 +18,11 @@ export function generateBoard(levelDef, rng, factory) {
   if (colorCount < 3 || colorCount > 6) {
     throw new Error(`colorCount must be 3..6, got ${colorCount}`);
   }
+  const mask = levelDef.layout ? Board.maskFromLayout(levelDef.layout, rows, cols) : null;
   for (let attempt = 0; attempt < 50; attempt++) {
-    const board = new Board(rows, cols);
+    const board = new Board(rows, cols, mask);
     for (const p of board.positions()) {
+      if (board.isHole(p.r, p.c)) continue;
       const allowed = [];
       for (let color = 0; color < colorCount; color++) {
         if (!wouldCompleteRun(board, p, color)) allowed.push(color);

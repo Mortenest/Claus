@@ -4,6 +4,7 @@
  */
 
 import { PALETTE } from './sprites.js';
+import { worldOf } from '../core/levels.js';
 
 export const STRINGS = {
   tagline: 'Match three. Crunch the goal.',
@@ -20,6 +21,8 @@ export const STRINGS = {
   restart: 'Restart',
   quit: 'Quit',
   won: 'Level Complete!',
+  sweetFinish: 'Sweet Finish!',
+  sweetFinishBonus: (points) => `Sweet Finish +${points.toLocaleString('en-US')}`,
   lost: 'Out of Moves!',
   lostSub: 'So close — one more go?',
   tryAgain: 'Try Again',
@@ -39,7 +42,7 @@ export function createScreens(handlers) {
       levels: el('screen-levels'),
       game: el('screen-game'),
     },
-    grid: el('level-grid'),
+    levelList: el('level-list'),
     score: el('hud-score'),
     goal: el('hud-goal'),
     goalFill: el('hud-progress-fill'),
@@ -84,8 +87,21 @@ export function createScreens(handlers) {
   }
 
   function renderLevels(levels, unlockedTo, progressOf) {
-    refs.grid.replaceChildren();
+    refs.levelList.replaceChildren();
+    let currentWorld = null;
+    let grid = null;
     for (const def of levels) {
+      const world = worldOf(def.id);
+      if (world !== currentWorld) {
+        currentWorld = world;
+        const header = document.createElement('h3');
+        header.className = 'world-header';
+        header.dataset.theme = world.theme;
+        header.innerHTML = `<span class="world-dot"></span>World ${world.id} — ${world.name}`;
+        grid = document.createElement('div');
+        grid.className = 'level-grid';
+        refs.levelList.append(header, grid);
+      }
       const cell = document.createElement('button');
       cell.className = 'level-cell';
       const locked = def.id > unlockedTo;
@@ -98,7 +114,7 @@ export function createScreens(handlers) {
         cell.innerHTML = `<span>${def.id}</span><span class="stars">${starRow(stars)}</span>`;
         cell.addEventListener('click', () => handlers.onPickLevel(def.id));
       }
-      refs.grid.append(cell);
+      grid.append(cell);
     }
   }
 
@@ -160,6 +176,7 @@ export function createScreens(handlers) {
         <p class="dialog-sub">${STRINGS.level(data.levelId)} · ${data.levelName}</p>
         <div class="dialog-stars animate">${stars}</div>
         <div class="dialog-score">${fmt(data.score)}</div>
+        ${data.bonusTotal ? `<p class="dialog-sub">${STRINGS.sweetFinishBonus(data.bonusTotal)}</p>` : ''}
         <div class="dialog-actions">
           ${data.hasNext ? button(STRINGS.next, 'next', true) : ''}
           ${button(STRINGS.tryAgain, 'replay', !data.hasNext)}

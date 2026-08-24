@@ -1,190 +1,287 @@
 /**
- * The level list — pure data. Star thresholds are calibrated against greedy
- * bot free-plays (tools/balance.js, 100 games/level): the 1★ target sits at
- * ~20% of the bot's median final score on early levels rising to ~58% on
- * late ones, 3★ near the bot median. Bot medians noted per level.
+ * The level list — pure data. Star thresholds are calibrated by the greedy
+ * bot playing each level's REAL goal (tools/balance.js, 100 games/level,
+ * Sweet Finish included): 1★ = the score target, 3★ ≈ 82% of the winning
+ * runs' median final score, 2★ halfway between. Bot win rates and won-run
+ * medians are noted per level; levels the bot won under ~70% of the time
+ * had their goals eased.
  */
 
 /** @type {import('./levels.js').LevelDef[]} */
 export const LEVELS = [
   {
-    // bot median 39,555
+    // win 100% · won-median 14,510
     id: 1,
     name: 'First Crunch',
     rows: 8, cols: 8, colorCount: 4,
     moves: 20,
     goal: { type: 'score', target: 8000 },
-    stars: [8000, 20000, 36000],
+    stars: [8000, 10000, 12000],
     seedBase: 0xc1a05001,
   },
   {
-    // bot median 39,605
+    // win 100% · won-median 16,760
     id: 2,
     name: 'Warm Swirl',
     rows: 8, cols: 8, colorCount: 4,
     moves: 18,
     goal: { type: 'score', target: 10000 },
-    stars: [10000, 24000, 40000],
+    stars: [10000, 12000, 13800],
     seedBase: 0xc1a05002,
   },
   {
-    // bot median 15,490
+    // win 99% · won-median 8,650
     id: 3,
     name: 'Five Flavors',
     rows: 8, cols: 8, colorCount: 5,
     moves: 20,
     goal: { type: 'score', target: 5000 },
-    stars: [5000, 9000, 14000],
+    stars: [5000, 6000, 7100],
     seedBase: 0xc1a05003,
   },
   {
-    // bot median: 52 red collected, 13,285 score
+    // win 97% · won-median 9,355
     id: 4,
     name: 'Red Harvest',
     rows: 8, cols: 8, colorCount: 5,
     moves: 18,
     goal: { type: 'collect', color: 0, count: 28 },
-    stars: [4500, 9000, 13500],
+    stars: [4700, 6200, 7650],
     seedBase: 0xc1a05004,
   },
   {
-    // bot median 12,405
+    // win 100% · won-median 7,875
     id: 5,
     name: 'Tight Squeeze',
     rows: 8, cols: 8, colorCount: 5,
     moves: 16,
     goal: { type: 'score', target: 4500 },
-    stars: [4500, 8000, 12500],
+    stars: [4500, 5500, 6450],
     seedBase: 0xc1a05005,
   },
   {
-    // bot median: 46 blue collected, 11,275 score
+    // win 92% · won-median 9,325
     id: 6,
     name: 'Blue Monday',
     rows: 7, cols: 8, colorCount: 5,
     moves: 18,
     goal: { type: 'collect', color: 4, count: 30 },
-    stars: [4500, 8000, 11500],
+    stars: [4650, 6150, 7650],
     seedBase: 0xc1a05006,
   },
   {
-    // bot median 6,845
+    // win 100% · won-median 5,645
     id: 7,
     name: 'Full Spectrum',
     rows: 8, cols: 8, colorCount: 6,
     moves: 20,
     goal: { type: 'score', target: 2800 },
-    stars: [2800, 4800, 7000],
+    stars: [2800, 3700, 4650],
     seedBase: 0xc1a05007,
   },
   {
-    // bot median: 38 green collected, 9,545 score
+    // win 92% · won-median 9,200
     id: 8,
     name: 'Green Field',
     rows: 9, cols: 9, colorCount: 6,
     moves: 22,
     goal: { type: 'collect', color: 3, count: 26 },
-    stars: [4000, 6800, 9800],
+    stars: [4600, 6050, 7550],
     seedBase: 0xc1a05008,
   },
   {
-    // bot median 6,005
+    // win 98% · won-median 5,240
     id: 9,
     name: 'Short Fuse',
     rows: 8, cols: 8, colorCount: 6,
     moves: 16,
     goal: { type: 'score', target: 2800 },
-    stars: [2800, 4500, 6200],
+    stars: [2800, 3550, 4300],
     seedBase: 0xc1a05009,
   },
   {
-    // bot median: 27 purple collected, 6,230 score
+    // win 79% · won-median 6,345
     id: 10,
     name: 'Purple Rain',
     rows: 9, cols: 7, colorCount: 6,
     moves: 18,
     goal: { type: 'collect', color: 5, count: 20 },
-    stars: [3000, 4800, 6500],
+    stars: [3150, 4200, 5200],
+    layout: [
+      '#.....#',
+      '.......',
+      '.......',
+      '.......',
+      '.......',
+      '.......',
+      '.......',
+      '.......',
+      '#.....#',
+    ],
     seedBase: 0xc1a0500a,
   },
   {
-    // bot median 5,055
+    // win 86% · won-median 4,035
     id: 11,
     name: 'No Slack',
     rows: 8, cols: 8, colorCount: 6,
     moves: 14,
     goal: { type: 'score', target: 2800 },
-    stars: [2800, 4200, 5500],
+    stars: [2800, 3050, 3300],
+    layout: [
+      '##....##',
+      '##....##',
+      '........',
+      '........',
+      '........',
+      '........',
+      '##....##',
+      '##....##',
+    ],
     seedBase: 0xc1a0500b,
   },
   {
-    // bot median 9,000 — the boss board
+    // win 58% at target 5,200 · won-median 6,535 — eased
     id: 12,
     name: 'The Big Crunch',
     rows: 9, cols: 7, colorCount: 6,
     moves: 25,
-    goal: { type: 'score', target: 5200 },
-    stars: [5200, 7500, 9800],
+    goal: { type: 'score', target: 4600 },
+    stars: [4600, 5000, 5350],
+    layout: [
+      '.......',
+      '.......',
+      '#.....#',
+      '##...##',
+      '###.###',
+      '##...##',
+      '#.....#',
+      '.......',
+      '.......',
+    ],
     seedBase: 0xc1a0500c,
   },
   {
-    // bot median 5,660
+    // win 71% at target 3,200 · won-median 4,485 — eased
     id: 13,
     name: 'Wide Load',
     rows: 7, cols: 9, colorCount: 6,
     moves: 18,
-    goal: { type: 'score', target: 3200 },
-    stars: [3200, 4600, 6000],
+    goal: { type: 'score', target: 3000 },
+    stars: [3000, 3350, 3700],
+    layout: [
+      '#.......#',
+      '.........',
+      '...###...',
+      '...###...',
+      '.........',
+      '.........',
+      '#.......#',
+    ],
     seedBase: 0xc1a0500d,
   },
   {
-    // bot median: 22 orange collected, 5,355 score
+    // win 57% at 16 orange · won-median 4,030 — eased
     id: 14,
     name: 'Orange Crush',
     rows: 8, cols: 8, colorCount: 6,
     moves: 16,
-    goal: { type: 'collect', color: 1, count: 16 },
-    stars: [2800, 4200, 5600],
+    goal: { type: 'collect', color: 1, count: 14 },
+    stars: [2000, 2650, 3300],
+    layout: [
+      '...##...',
+      '...##...',
+      '........',
+      '........',
+      '........',
+      '........',
+      '...##...',
+      '...##...',
+    ],
     seedBase: 0xc1a0500e,
   },
   {
-    // bot median 7,040
+    // win 97% · won-median 6,325
     id: 15,
     name: 'The Tower',
     rows: 10, cols: 6, colorCount: 6,
     moves: 20,
     goal: { type: 'score', target: 4000 },
-    stars: [4000, 5800, 7400],
+    stars: [4000, 4600, 5200],
+    layout: [
+      '#....#',
+      '#....#',
+      '......',
+      '......',
+      '......',
+      '......',
+      '......',
+      '......',
+      '......',
+      '......',
+    ],
     seedBase: 0xc1a0500f,
   },
   {
-    // bot median: 26 yellow collected, 6,455 score
+    // win 57% at 18 yellow · won-median 5,065 — eased
     id: 16,
     name: 'Mellow Yellow',
     rows: 9, cols: 8, colorCount: 6,
     moves: 17,
-    goal: { type: 'collect', color: 2, count: 18 },
-    stars: [3200, 5000, 6800],
+    goal: { type: 'collect', color: 2, count: 16 },
+    stars: [2550, 3350, 4150],
+    layout: [
+      '....####',
+      '.....###',
+      '......##',
+      '.......#',
+      '........',
+      '#.......',
+      '##......',
+      '###.....',
+      '####....',
+    ],
     seedBase: 0xc1a05010,
   },
   {
-    // bot median 3,985
+    // win 94% · won-median 3,975
     id: 17,
     name: 'Pressure Cooker',
     rows: 7, cols: 7, colorCount: 6,
     moves: 14,
     goal: { type: 'score', target: 2300 },
-    stars: [2300, 3300, 4200],
+    stars: [2300, 2800, 3250],
+    layout: [
+      '#.....#',
+      '.......',
+      '.......',
+      '.......',
+      '.......',
+      '.......',
+      '#.....#',
+    ],
     seedBase: 0xc1a05011,
   },
   {
-    // bot median 11,755 — the grand finale
+    // win 66% at target 7,000 · won-median 8,685 — eased
     id: 18,
     name: 'Grand Finale',
     rows: 10, cols: 7, colorCount: 6,
     moves: 28,
-    goal: { type: 'score', target: 7000 },
-    stars: [7000, 9500, 12400],
+    goal: { type: 'score', target: 6400 },
+    stars: [6400, 7000, 7700],
+    layout: [
+      '#.....#',
+      '.......',
+      '.......',
+      '#.....#',
+      '##...##',
+      '##...##',
+      '#.....#',
+      '.......',
+      '.......',
+      '#.....#',
+    ],
     seedBase: 0xc1a05012,
   },
 ];

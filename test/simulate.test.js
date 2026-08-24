@@ -9,6 +9,7 @@ import { resolveMove } from '../src/core/resolve.js';
 import { findValidMoves } from '../src/core/moves.js';
 import { createRng } from '../src/core/rng.js';
 import { createTileFactory } from '../src/core/tiles.js';
+import { Game } from '../src/core/game.js';
 import { applyStepsToBoard, assertBoardsEqual, assertSettled, boardIds } from './helpers.js';
 
 const SEEDS = 100;
@@ -54,6 +55,77 @@ test(`fuzz: ${SEEDS} seeded games × ${MOVES_PER_GAME} random moves hold all inv
       assertBoardsEqual(shadow, board, `seed ${seed} move ${m}: replay diverged`);
       assertSettled(board);
       boardIds(board); // asserts uniqueness on-board
+    }
+  }
+});
+
+const WON_GAME_SEEDS = 30;
+
+test(`fuzz: ${WON_GAME_SEEDS} full games to the end, finale included`, () => {
+  const DONUT = [
+    '##....##',
+    '#......#',
+    '........',
+    '...##...',
+    '...##...',
+    '........',
+    '#......#',
+    '##....##',
+  ];
+  for (let seed = 0; seed < WON_GAME_SEEDS; seed++) {
+    const level = {
+      id: 1,
+      name: 'Fuzz',
+      rows: 8,
+      cols: 8,
+      colorCount: 5,
+      moves: 12,
+      goal: { type: 'score', target: 800 },
+      stars: [800, 2000, 4000],
+      seedBase: 1,
+      ...(seed % 2 === 1 ? { layout: DONUT } : {}),
+    };
+    const game = new Game(level, seed);
+    const shadow = game.board.clone();
+    const seenIds = new Set(boardIds(game.board));
+
+    let guard = 0;
+    while (game.status === 'playing' && guard++ < 20) {
+      const hint = game.findHint();
+      assert.ok(hint, `seed ${seed}: no hint on a live board`);
+      const { valid, steps } = game.applyMove(hint);
+      assert.ok(valid);
+
+      for (const step of steps) {
+        const born =
+          step.type === 'spawn'
+            ? step.spawns.map((s) => s.tile.id)
+            : step.type === 'clear'
+              ? step.created.map((c) => c.tile.id)
+              : step.type === 'finale'
+                ? step.conversions.map((c) => c.tile.id)
+                : [];
+        for (const id of born) {
+          assert.ok(!seenIds.has(id), `seed ${seed}: id ${id} reused`);
+          seenIds.add(id);
+        }
+      }
+
+      const finaleIndex = steps.findIndex((s) => s.type === 'finale');
+      if (finaleIndex !== -1) {
+        assert.ok(
+          !steps.some((s, i) => s.type === 'shuffle' && i > finaleIndex),
+          `seed ${seed}: shuffle after finale`,
+        );
+      }
+
+      applyStepsToBoard(shadow, steps);
+      assertBoardsEqual(shadow, game.board, `seed ${seed}: replay diverged`);
+    }
+    assert.notEqual(game.status, 'playing', `seed ${seed}: game never ended`);
+    assertSettled(game.board, { requireMove: false });
+    if (game.status === 'won') {
+      assert.equal(game.movesLeft, 0, `seed ${seed}: moves left after a win`);
     }
   }
 });

@@ -79,8 +79,10 @@ export function createPlayback({ renderer, clock, effects = {} }) {
             ),
           ),
         );
+      case 'finale':
+        return playFinale(step);
       case 'end':
-        // the juice layer may animate (bonus tick-down) — await it
+        // the juice layer may animate — await it
         return Promise.resolve(fx('onEnd', step));
       default:
         return Promise.resolve();
@@ -145,6 +147,24 @@ export function createPlayback({ renderer, clock, effects = {} }) {
       );
     }
     await Promise.all(jobs);
+  }
+
+  /** Sweet Finish: each unspent move morphs a candy into a striped, staggered. */
+  async function playFinale(step) {
+    fx('onFinaleStart', step);
+    await Promise.all(
+      step.conversions.map(async (conv, i) => {
+        await clock.wait(1 + i * 130);
+        renderer.visuals.delete(conv.replacedId);
+        const v = renderer.makeVisual(conv.tile, conv.pos.r, conv.pos.c);
+        v.scaleX = 0;
+        v.scaleY = 0;
+        renderer.visuals.set(conv.tile.id, v);
+        fx('onFinaleConvert', conv, v, i);
+        await clock.tween(v, { scaleX: 1, scaleY: 1 }, { duration: 220, ease: ease.backOut });
+      }),
+    );
+    await clock.wait(140); // beat before the detonation round
   }
 
   const fallDuration = (rows) => 90 * Math.sqrt(Math.max(1, rows)) + 60;

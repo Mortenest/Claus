@@ -21,8 +21,19 @@
  *      no match groups.
  *   3. { type:'shuffle', moves }        only if the settled board had no
  *                                       valid move (ids preserved)
+ *   4. { type:'finale', conversions:[{ pos, tile, replacedId }] }
+ *      Sweet Finish (resolveFinale, driven by game.js when the goal is met
+ *      with moves left): one surviving normal tile per unspent move becomes
+ *      a striped candy — replay: set tile at pos (the replacedId tile is
+ *      replaced, not cleared) — then all conversions detonate as one
+ *      cascade-0 clear round (cause 'combo'), cascading and settling as
+ *      usual. No shuffle step ever follows a finale: the level is over, so
+ *      the ≥1-valid-move invariant is waived (the board still ends full and
+ *      matchless).
  *
- * Invariants on return: board is full, matchless, and has ≥1 valid move;
+ * Invariants on return: board is full (every non-hole cell holds a tile —
+ * hole cells, Board.isHole, are permanently null and never appear in any
+ * step), matchless, and has ≥1 valid move (except after a finale, above);
  * replaying the steps over a copy of the pre-move board reproduces the
  * post-move board exactly.
  *
@@ -30,8 +41,11 @@
  * goal bookkeeping.
  *
  * RNG consumption order (ports must match): spawn colors are drawn column
- * by column left→right, top→bottom within a column; reshuffle draws only
- * when it runs.
+ * by column left→right, top→bottom over the playable cells of a column;
+ * reshuffle draws only when it runs; the finale draws, per conversion in
+ * order, rng.int(candidateCount) over the normal tiles in scan order and
+ * then rng.int(2) for orientation (0 = striped_h), all before any of the
+ * finale's spawn draws.
  */
 
 import { findMatches, decideSpecials } from './match.js';
@@ -66,18 +80,74 @@ export function resolveMove(ctx, move) {
     b: { id: partnerId, from: pos(move.to), to: pos(move.from) },
   });
 
-  let cascade = 0;
   if (activation) {
     const cleared = expandClears(board, activationSeeds(board, move.from, move.to));
-    pushClearRound(ctx, steps, totals, scoreStart, { cascade, cleared, groups: [], created: [] });
-    cascade = 1;
+    pushClearRound(ctx, steps, totals, scoreStart, { cascade: 0, cleared, groups: [], created: [] });
+  }
+  runCascades(ctx, steps, totals, scoreStart, activation ? 1 : 0, [move.to, move.from]);
+
+  if (findValidMoves(board).length === 0) {
+    steps.push({ type: 'shuffle', moves: reshuffle(board, ctx.rng) });
+  }
+  return { steps, scoreDelta: totals.scoreDelta, collected: totals.collected };
+}
+
+/**
+ * The Sweet Finish: convert one surviving normal tile per unspent move into
+ * a striped candy, detonate them all as one cascade-0 round, and settle.
+ * The caller (game.js) invokes this only on a just-won game; no reshuffle
+ * runs afterwards (see the protocol header).
+ *
+ * @param {Parameters<typeof resolveMove>[0]} ctx
+ * @param {number} movesToConvert
+ * @returns {{ steps: object[], scoreDelta: number,
+ *             collected: Record<number, number>, conversions: number }}
+ */
+export function resolveFinale(ctx, movesToConvert) {
+  const { board } = ctx;
+  const steps = [];
+  const totals = { scoreDelta: 0, collected: {} };
+  const scoreStart = ctx.scoreStart ?? 0;
+
+  const conversions = [];
+  for (let i = 0; i < movesToConvert; i++) {
+    const candidates = [];
+    for (const p of board.positions()) {
+      const tile = board.get(p.r, p.c);
+      if (tile !== null && tile.kind === 'normal') candidates.push({ pos: p, tile });
+    }
+    if (candidates.length === 0) break;
+    const picked = candidates[ctx.rng.int(candidates.length)];
+    const kind = ctx.rng.int(2) === 0 ? 'striped_h' : 'striped_v';
+    const converted = ctx.factory.make(picked.tile.color, kind);
+    board.set(picked.pos.r, picked.pos.c, converted);
+    conversions.push({ pos: pos(picked.pos), tile: converted, replacedId: picked.tile.id });
+  }
+  if (conversions.length === 0) {
+    return { steps, scoreDelta: 0, collected: {}, conversions: 0 };
   }
 
-  for (;;) {
-    const groups = decideSpecials(
-      findMatches(board),
-      cascade === 0 ? [move.to, move.from] : [],
-    );
+  steps.push({ type: 'finale', conversions });
+  const seeds = conversions.map((c) => ({ pos: c.pos, cause: 'combo', wave: 0 }));
+  const cleared = expandClears(board, seeds);
+  pushClearRound(ctx, steps, totals, scoreStart, { cascade: 0, cleared, groups: [], created: [] });
+  runCascades(ctx, steps, totals, scoreStart, 1, []);
+  return {
+    steps,
+    scoreDelta: totals.scoreDelta,
+    collected: totals.collected,
+    conversions: conversions.length,
+  };
+}
+
+/**
+ * Run match → clear → fall/spawn rounds until a round finds no matches.
+ * `preferred` (special-creation placement) is only consulted at cascade 0.
+ */
+function runCascades(ctx, steps, totals, scoreStart, startCascade, preferred = []) {
+  const { board } = ctx;
+  for (let cascade = startCascade; ; cascade++) {
+    const groups = decideSpecials(findMatches(board), cascade === 0 ? preferred : []);
     if (groups.length === 0) break;
 
     const protectedKeys = new Set(
@@ -103,13 +173,7 @@ export function resolveMove(ctx, move) {
         replacedId: board.get(g.creates.pos.r, g.creates.pos.c).id,
       }));
     pushClearRound(ctx, steps, totals, scoreStart, { cascade, cleared, groups, created });
-    cascade++;
   }
-
-  if (findValidMoves(board).length === 0) {
-    steps.push({ type: 'shuffle', moves: reshuffle(board, ctx.rng) });
-  }
-  return { steps, scoreDelta: totals.scoreDelta, collected: totals.collected };
 }
 
 function pos(p) {
@@ -165,14 +229,18 @@ function pushClearRound(ctx, steps, totals, scoreStart, round) {
 }
 
 /**
- * Slide every tile straight down into the holes below it.
- * Emitted per column left→right, bottom-up within the column.
+ * Slide every tile straight down into the empties below it, past any hole
+ * cells (which never hold tiles). Emitted per column left→right, bottom-up
+ * within the column; from→to distances count raw rows including holes, so a
+ * renderer's straight-line fall passes visually through the gaps.
  */
 export function applyGravity(board) {
   const moves = [];
   for (let c = 0; c < board.cols; c++) {
     let write = board.rows - 1;
+    while (write >= 0 && board.isHole(write, c)) write--;
     for (let r = board.rows - 1; r >= 0; r--) {
+      if (board.isHole(r, c)) continue;
       const tile = board.get(r, c);
       if (tile === null) continue;
       if (write !== r) {
@@ -180,27 +248,35 @@ export function applyGravity(board) {
         board.set(r, c, null);
         moves.push({ id: tile.id, from: { r, c }, to: { r: write, c } });
       }
-      write--;
+      do {
+        write--;
+      } while (write >= 0 && board.isHole(write, c));
     }
   }
   return moves;
 }
 
 /**
- * Fill the holes left at the top of each column with fresh tiles.
- * fromRowOffset is the column's spawn count, so a renderer can start the
- * whole batch stacked that many rows above the board and drop it in
- * formation.
+ * Fill every empty playable cell with fresh tiles (callers must have applied
+ * gravity first). fromRowOffset = the number of rows the spawn falls: per
+ * column the batch starts stacked contiguously just above row 0 in target
+ * order — the j-th spawn counting from the bottom of the batch starts at row
+ * −j, so fromRowOffset = at.r + j. On hole-free boards this equals the
+ * column's spawn count for every spawn (the batch drops in formation).
  */
 export function spawnFill(board, rng, factory, colorCount) {
   const spawns = [];
   for (let c = 0; c < board.cols; c++) {
-    let holes = 0;
-    while (holes < board.rows && board.get(holes, c) === null) holes++;
-    for (let r = 0; r < holes; r++) {
+    const targets = [];
+    for (let r = 0; r < board.rows; r++) {
+      if (!board.isHole(r, c) && board.get(r, c) === null) targets.push(r);
+    }
+    for (let i = 0; i < targets.length; i++) {
+      const r = targets[i];
+      const j = targets.length - i; // 1 for the bottom-most target
       const tile = factory.make(rng.int(colorCount));
       board.set(r, c, tile);
-      spawns.push({ tile, at: { r, c }, fromRowOffset: holes });
+      spawns.push({ tile, at: { r, c }, fromRowOffset: r + j });
     }
   }
   return spawns;

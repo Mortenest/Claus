@@ -5,7 +5,7 @@
  * playback, and screens.
  */
 
-import { LEVELS, getLevel, attemptSeed } from '../core/levels.js';
+import { LEVELS, getLevel, attemptSeed, worldOf } from '../core/levels.js';
 import { Game } from '../core/game.js';
 import {
   loadProgress,
@@ -24,6 +24,9 @@ import { createInput } from './input.js';
 import { createParticles } from './particles.js';
 import { createAudio } from './audio.js';
 import { createHaptics } from './haptics.js';
+
+/** Testing switch: show every level unlocked (progression logic stays). */
+const UNLOCK_ALL = true;
 
 const canvas = document.getElementById('board');
 const sprites = createSpriteCache();
@@ -150,18 +153,17 @@ const effects = {
     audio.sfx('shuffle');
     haptics.buzz('shuffle');
   },
-  async onEnd(step) {
-    if (step.bonus) {
-      for (let i = 0; i < step.bonus.movesConverted; i++) {
-        await clock.wait(85);
-        hud.score += step.bonus.perMove;
-        hud.movesLeft = Math.max(0, hud.movesLeft - 1);
-        if (hud.goal?.type === 'score') hud.goal = { ...hud.goal, current: hud.score };
-        screens.setHud(hudState());
-        audio.sfx('bonus', { pitch: 1 + i * 0.06 });
-      }
-      await clock.wait(160);
-    }
+  onFinaleStart() {
+    screens.showBanner(STRINGS.sweetFinish);
+    haptics.buzz('special');
+  },
+  onFinaleConvert(conv, _visual, i) {
+    hud.movesLeft = Math.max(0, hud.movesLeft - 1);
+    screens.setHud(hudState());
+    audio.sfx('bonus', { pitch: 1 + i * 0.08 });
+    particles.flash('ring', { pos: conv.pos });
+  },
+  onEnd(step) {
     if (step.outcome === 'won') {
       audio.sfx('win');
       haptics.buzz('win');
@@ -204,13 +206,20 @@ function syncHudToGame() {
   screens.setHud(hudState());
 }
 
+/** World theme + a slight per-level background shade rotation. */
+function applyTheme(levelId) {
+  const world = worldOf(levelId);
+  document.body.classList.toggle('theme-frost', world.theme === 'frost');
+  const indexInWorld = levelId - world.firstLevel;
+  document.body.dataset.shade = String(indexInWorld % 3);
+}
+
 function showLevels() {
   playback.cancel();
   game = null;
   progress = loadProgress();
-  screens.renderLevels(LEVELS, unlockedUpTo(progress, LEVELS.length), (id) =>
-    levelProgress(progress, id),
-  );
+  const unlockedTo = UNLOCK_ALL ? LEVELS.length : unlockedUpTo(progress, LEVELS.length);
+  screens.renderLevels(LEVELS, unlockedTo, (id) => levelProgress(progress, id));
   screens.show('levels');
 }
 
@@ -220,9 +229,11 @@ function startLevel(id) {
   currentLevelId = id;
   paused = false;
   clock.timeScale = 1;
+  applyTheme(id);
   const attempt = bumpAttempt(id);
   game = new Game(def, attemptSeed(def, attempt));
-  renderer.setBoardSize(def.rows, def.cols);
+  const board = game.board;
+  renderer.setBoardSize(def.rows, def.cols, (r, c) => board.isHole(r, c));
   renderer.syncFromBoard(game.board);
   renderer.state.selection = null;
   particles.clear();
@@ -256,6 +267,7 @@ function handleGameEnd(endStep) {
       screens.showDialog('won', {
         stars: endStep.stars,
         score: endStep.score,
+        bonusTotal: endStep.bonus?.total ?? 0,
         levelId: def.id,
         levelName: def.name,
         hasNext: def.id < LEVELS.length,
