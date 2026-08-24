@@ -150,18 +150,17 @@ const effects = {
     audio.sfx('shuffle');
     haptics.buzz('shuffle');
   },
-  async onEnd(step) {
-    if (step.bonus) {
-      for (let i = 0; i < step.bonus.movesConverted; i++) {
-        await clock.wait(85);
-        hud.score += step.bonus.perMove;
-        hud.movesLeft = Math.max(0, hud.movesLeft - 1);
-        if (hud.goal?.type === 'score') hud.goal = { ...hud.goal, current: hud.score };
-        screens.setHud(hudState());
-        audio.sfx('bonus', { pitch: 1 + i * 0.06 });
-      }
-      await clock.wait(160);
-    }
+  onFinaleStart() {
+    screens.showBanner(STRINGS.sweetFinish);
+    haptics.buzz('special');
+  },
+  onFinaleConvert(conv, _visual, i) {
+    hud.movesLeft = Math.max(0, hud.movesLeft - 1);
+    screens.setHud(hudState());
+    audio.sfx('bonus', { pitch: 1 + i * 0.08 });
+    particles.flash('ring', { pos: conv.pos });
+  },
+  onEnd(step) {
     if (step.outcome === 'won') {
       audio.sfx('win');
       haptics.buzz('win');
@@ -257,6 +256,7 @@ function handleGameEnd(endStep) {
       screens.showDialog('won', {
         stars: endStep.stars,
         score: endStep.score,
+        bonusTotal: endStep.bonus?.total ?? 0,
         levelId: def.id,
         levelName: def.name,
         hasNext: def.id < LEVELS.length,

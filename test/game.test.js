@@ -2,7 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../src/core/game.js';
 import { createRng } from '../src/core/rng.js';
-import { boardFrom, createTileFactory, stepsOfType, scriptedRng } from './helpers.js';
+import {
+  boardFrom,
+  createTileFactory,
+  stepsOfType,
+  scriptedRng,
+  applyStepsToBoard,
+  assertBoardsEqual,
+  assertSettled,
+} from './helpers.js';
 
 /**
  * Fixture game: injects a known 3×4 board (no matches, valid moves exist)
@@ -73,18 +81,40 @@ test('malformed moves throw (caller bug, not a reject)', () => {
   assert.throws(() => game.applyMove({ from: { r: 0, c: 3 }, to: { r: 0, c: 4 } }));
 });
 
-test('meeting the goal ends the level early with a move bonus', () => {
+test('meeting the goal early triggers the Sweet Finish finale', () => {
   const game = fixtureGame({ goal: { type: 'score', target: 90 }, stars: [90, 200, 100000] });
+  const shadow = game.board.clone();
   const { steps } = game.applyMove(GOOD_MOVE);
+
+  const finale = steps.find((s) => s.type === 'finale');
+  assert.ok(finale, 'an early win must produce a finale step');
+  assert.equal(finale.conversions.length, 4); // 5 moves, 1 spent
+  for (const conv of finale.conversions) {
+    assert.ok(['striped_h', 'striped_v'].includes(conv.tile.kind));
+    assert.ok(conv.tile.color >= 0);
+    assert.notEqual(conv.tile.id, conv.replacedId);
+  }
+  const finaleIndex = steps.indexOf(finale);
+  const detonation = steps[finaleIndex + 1];
+  assert.equal(detonation.type, 'clear');
+  assert.equal(detonation.cascade, 0);
+  assert.ok(detonation.cleared.every((e) => e.cause !== 'match'));
+  assert.ok(!steps.some((s, i) => s.type === 'shuffle' && i > finaleIndex));
+
   const end = steps.at(-1);
   assert.equal(end.type, 'end');
   assert.equal(end.outcome, 'won');
   assert.equal(game.status, 'won');
-  assert.deepEqual(end.bonus, { perMove: 150, movesConverted: 4, total: 600 });
+  assert.equal(end.bonus.movesConverted, 4);
+  assert.ok(end.bonus.total >= 4 * 40, 'finale must out-earn a token bonus');
   assert.equal(end.score, game.score);
   assert.equal(game.movesLeft, 0);
-  assert.equal(end.stars, 2); // ≥90 and ≥200 with the bonus, 3★ out of reach
+  assert.ok(end.stars >= 2); // 90 + finale blasts clear ≥200 easily, 3★ out of reach
   assert.throws(() => game.applyMove(GOOD_MOVE));
+
+  applyStepsToBoard(shadow, steps);
+  assertBoardsEqual(shadow, game.board);
+  assertSettled(game.board, { requireMove: false });
 });
 
 test('running out of moves without the goal loses with zero stars', () => {
