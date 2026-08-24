@@ -57,10 +57,26 @@ steps, and a `verifySync` tripwire asserts visuals match the board after every
 move. The step types are the porting contract — see the header of
 `src/core/resolve.js` for the exact ordering rules.
 
-Everything on screen is generated in code: candy sprites are drawn
-programmatically (a distinct silhouette per color, so the game reads without
-color vision), and every sound is synthesized with WebAudio — the repo ships no
-image or audio assets beyond one SVG icon.
+All sound is synthesized with WebAudio, and every image the game ships was
+rendered by this repo's own pipeline. Art loads through
+`assets/manifest.json` (`src/web/assets.js`); any missing key falls back to
+programmatic canvas/SVG drawing (a distinct silhouette per candy color, so
+the game reads without color vision). That makes better art **drop-in**:
+see `docs/ASSET-PROMPTS.md` for the Midjourney-ready prompt pack and the
+`assets-src/` drop zone.
+
+## Art pipeline
+
+```sh
+python3 -m http.server 8123                                # from the repo root
+NODE_PATH=/opt/node22/lib/node_modules node tools/bake-assets.cjs
+                                # renders tools/render-studio.html (layered
+                                # lighting recipes) → assets/raw-bake/*.png
+python3 tools/postprocess.py    # trim/pad/resize → assets/**.webp + icons/
+                                # + assets/manifest.json  (needs Pillow)
+python3 tools/process-assets.py # same, but ingesting external renders from
+                                # assets-src/ with automatic background cutout
+```
 
 ## Dev tools (`tools/`, never loaded by the game)
 

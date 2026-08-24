@@ -1,16 +1,25 @@
 /**
- * Programmatic candy art. Every (color, kind) pair is pre-rendered once per
- * cell size into an offscreen canvas, so the per-frame cost of a tile is one
+ * Candy art. Every (color, kind) pair is pre-rendered once per cell size
+ * into an offscreen canvas, so the per-frame cost of a tile is one
  * drawImage. Each color has a distinct silhouette (colorblind-friendly):
  *
  *   red circle · orange drop · yellow star · green triangle · blue diamond ·
  *   purple heart
+ *
+ * When the asset registry has a baked image for 'candy/<name>' it becomes
+ * the cell's base art (same silhouettes) and the striped/wrapped overlays
+ * draw on top; otherwise the programmatic drawing below is used, so a
+ * partial or absent manifest still renders every tile.
  *
  * Specials: striped = stripe overlay in the clear direction, wrapped =
  * candy in a translucent wrapper square, colorbomb = dark speckled sphere.
  * Sizes are in device pixels (callers multiply by dpr); rebuild after a
  * resize via clear().
  */
+
+import { getImage } from './assets.js';
+
+const COLOR_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'];
 
 export const PALETTE = [
   { base: '#ff4d6b', dark: '#c2233f', light: '#ff9fb2' }, // red
@@ -64,12 +73,29 @@ function drawTile(ctx, s, color, kind) {
   const cx = s / 2;
   const cy = s / 2;
   if (kind === 'colorbomb') {
-    drawColorbomb(ctx, s, cx, cy);
+    const img = getImage('candy/colorbomb');
+    if (img) ctx.drawImage(img, s * 0.02, s * 0.02, s * 0.96, s * 0.96);
+    else drawColorbomb(ctx, s, cx, cy);
     return;
   }
   const wrapped = kind === 'wrapped';
   const radius = s * (wrapped ? 0.315 : 0.4);
   const pal = PALETTE[color];
+
+  const img = getImage(`candy/${COLOR_NAMES[color]}`);
+  if (img) {
+    if (wrapped) drawWrapper(ctx, s, cx, cy, pal);
+    const box = s * (wrapped ? 0.74 : 0.96);
+    ctx.drawImage(img, cx - box / 2, cy - box / 2, box, box);
+    if (kind === 'striped_h' || kind === 'striped_v') {
+      // 'source-atop' clips the bars to the candy's own alpha
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-atop';
+      stripeBars(ctx, cx, cy, box * 0.42, kind === 'striped_h');
+      ctx.restore();
+    }
+    return;
+  }
 
   if (wrapped) drawWrapper(ctx, s, cx, cy, pal);
 
@@ -124,13 +150,17 @@ function drawStripes(ctx, color, cx, cy, radius, horizontal) {
   ctx.save();
   shapePath(ctx, color, cx, cy, radius);
   ctx.clip();
+  stripeBars(ctx, cx, cy, radius, horizontal);
+  ctx.restore();
+}
+
+function stripeBars(ctx, cx, cy, radius, horizontal) {
   ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
   const t = radius * 0.24;
   for (const offset of [-radius * 0.55, 0, radius * 0.55]) {
     if (horizontal) ctx.fillRect(cx - radius * 1.2, cy + offset - t / 2, radius * 2.4, t);
     else ctx.fillRect(cx + offset - t / 2, cy - radius * 1.2, t, radius * 2.4);
   }
-  ctx.restore();
 }
 
 function drawGloss(ctx, cx, cy, radius) {

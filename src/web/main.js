@@ -25,9 +25,15 @@ import { createParticles } from './particles.js';
 import { createAudio } from './audio.js';
 import { createHaptics } from './haptics.js';
 import { mountMascot } from './mascot.js';
+import { loadAssets, getImage } from './assets.js';
 
 /** Testing switch: show every level unlocked (progression logic stays). */
 const UNLOCK_ALL = true;
+
+// Preload the baked art before anything renders; with no manifest the game
+// falls back to programmatic drawing everywhere, so this never blocks boot
+// on an error.
+await loadAssets();
 
 const canvas = document.getElementById('board');
 const sprites = createSpriteCache();
@@ -218,12 +224,21 @@ function syncHudToGame() {
   screens.setHud(hudState());
 }
 
+/** Baked world painting behind all screens (veiled by CSS for contrast). */
+const worldBgEl = document.getElementById('world-bg');
+function setWorldBg(theme) {
+  const img = getImage(`bg/${theme}`);
+  worldBgEl.classList.toggle('on', img !== null);
+  if (img) worldBgEl.style.backgroundImage = `url("${img.src}")`;
+}
+
 /** World theme + a slight per-level background shade rotation. */
 function applyTheme(levelId) {
   const world = worldOf(levelId);
   document.body.classList.toggle('theme-frost', world.theme === 'frost');
   const indexInWorld = levelId - world.firstLevel;
   document.body.dataset.shade = String(indexInWorld % 3);
+  setWorldBg(world.theme);
 }
 
 function showLevels() {
@@ -298,6 +313,13 @@ function handleGameEnd(endStep) {
 
 // ---- boot ----
 
+const logoImg = getImage('logo');
+if (logoImg) {
+  const title = document.querySelector('.menu-title');
+  title.classList.add('has-logo');
+  title.innerHTML = `<img class="menu-logo" src="${logoImg.src}" alt="Candy Claus" draggable="false">`;
+}
+setWorldBg('meadow');
 screens.setToggles(progress.settings);
 screens.show('menu');
 

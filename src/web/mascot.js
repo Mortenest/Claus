@@ -8,6 +8,8 @@
  * Design source: tools/character-lab.html (candidate A, v2).
  */
 
+import { getImage } from './assets.js';
+
 const INK = '#2a1e33';
 
 export const MASCOT_PALETTES = {
@@ -235,6 +237,17 @@ export function mascotSvg(theme, mood = 'idle') {
 }
 
 /**
+ * Markup for one mascot pose: the baked raster when the asset registry has
+ * 'mascot/<theme>/<mood>', otherwise the inline SVG. Both carry the mood as
+ * a class so the pose animations in style.css apply either way.
+ */
+export function mascotMarkup(theme, mood = 'idle') {
+  const img = getImage(`mascot/${theme}/${mood}`);
+  if (img) return `<img class="${mood}" src="${img.src}" alt="" draggable="false">`;
+  return mascotSvg(theme, mood);
+}
+
+/**
  * Mount a live mascot into a container element.
  * @returns {{ el: Element, setTheme(theme): void,
  *             setMood(mood, holdMs?): void, react(event): void }}
@@ -246,7 +259,7 @@ export function mountMascot(container, theme = 'meadow') {
   container.classList.add('mascot');
 
   function render() {
-    container.innerHTML = mascotSvg(currentTheme, currentMood);
+    container.innerHTML = mascotMarkup(currentTheme, currentMood);
   }
 
   function setMood(mood, holdMs = 0) {
