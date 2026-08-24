@@ -8,3 +8,4 @@ scratch/
 # postprocessed files under assets/ ship
 assets/raw-bake/
 assets-src/
+__pycache__/
