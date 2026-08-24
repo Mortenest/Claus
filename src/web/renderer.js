@@ -20,11 +20,13 @@ export function createRenderer(canvas, sprites) {
     dpr: 1,
     selection: null, // {r, c} | null
     shake: { amp: 0, until: 0 },
+    isHole: () => false, // shaped boards: cells cut out of the board
   };
 
-  function setBoardSize(rows, cols) {
+  function setBoardSize(rows, cols, isHole = null) {
     state.rows = rows;
     state.cols = cols;
+    state.isHole = isHole ?? (() => false);
   }
 
   /** Fit the canvas to its parent box; rebuild sprite cache at the new size. */
@@ -95,6 +97,7 @@ export function createRenderer(canvas, sprites) {
     const wellSprite = sprites.well(Math.round(cell * state.dpr));
     for (let r = 0; r < state.rows; r++) {
       for (let c = 0; c < state.cols; c++) {
+        if (state.isHole(r, c)) continue;
         ctx.drawImage(wellSprite, c * cell, r * cell, cell, cell);
       }
     }

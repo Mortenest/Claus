@@ -3,12 +3,18 @@
  * frozen Tile or null. Board is the only mutable core structure, and only the
  * engine mutates it.
  *
- * toString/fromString exist for tests: boards read/write as ASCII so a failing
- * case reproduces in one literal. Two formats:
- *  - compact (normal tiles only): one char per cell, e.g. "rgb.yp"
- *  - token (any tiles): whitespace-separated tokens per line, e.g. "r gV *"
- * Token grammar: '.'=empty, color letter (roygbp)=normal, +H/V/W suffix =
- * striped_h/striped_v/wrapped, '*'=colorbomb.
+ * Shaped boards: an optional frozen hole mask marks cells that are not part
+ * of the board at all. Hole cells are permanently null — set() throws on
+ * them, matches break across them (null already breaks runs), tiles fall
+ * straight past them, and spawns drop in through them. "Hole" always means
+ * the mask; transiently empty playable cells are "empties".
+ *
+ * toString/fromString exist for tests: boards read/write as ASCII so a
+ * failing case reproduces in one literal (holes included). Two formats:
+ *  - compact (normal tiles only): one char per cell, e.g. "rg#.yp"
+ *  - token (any tiles): whitespace-separated tokens per line, e.g. "r gV #"
+ * Token grammar: '.'=empty, '#'=hole, color letter (roygbp)=normal,
+ * +H/V/W suffix = striped_h/striped_v/wrapped, '*'=colorbomb.
  */
 
 import { COLOR_LETTERS, createTileFactory } from './tiles.js';
@@ -17,11 +23,21 @@ const KIND_SUFFIX = { striped_h: 'H', striped_v: 'V', wrapped: 'W' };
 const SUFFIX_KIND = { H: 'striped_h', V: 'striped_v', W: 'wrapped' };
 
 export class Board {
-  constructor(rows, cols) {
+  /**
+   * @param {number} rows
+   * @param {number} cols
+   * @param {ReadonlyArray<boolean> | null} [holeMask] row-major, frozen;
+   *   shared by reference across clones (never mutated)
+   */
+  constructor(rows, cols, holeMask = null) {
     this.rows = rows;
     this.cols = cols;
     /** @type {(import('./tiles.js').Tile | null)[]} row-major */
     this.cells = new Array(rows * cols).fill(null);
+    if (holeMask !== null && holeMask.length !== rows * cols) {
+      throw new Error('holeMask size mismatch');
+    }
+    this.holeMask = holeMask;
   }
 
   index(r, c) {
@@ -32,6 +48,12 @@ export class Board {
     return r >= 0 && r < this.rows && c >= 0 && c < this.cols;
   }
 
+  /** Is this cell cut out of the board? (false everywhere on maskless boards) */
+  isHole(r, c) {
+    if (!this.inBounds(r, c)) throw new Error(`isHole out of bounds: ${r},${c}`);
+    return this.holeMask !== null && this.holeMask[this.index(r, c)];
+  }
+
   get(r, c) {
     if (!this.inBounds(r, c)) throw new Error(`get out of bounds: ${r},${c}`);
     return this.cells[this.index(r, c)];
@@ -39,12 +61,13 @@ export class Board {
 
   set(r, c, tile) {
     if (!this.inBounds(r, c)) throw new Error(`set out of bounds: ${r},${c}`);
+    if (this.isHole(r, c)) throw new Error(`set into a hole: ${r},${c}`);
     this.cells[this.index(r, c)] = tile;
   }
 
   /** Tiles are frozen, so copying the cell array is a full snapshot. */
   clone() {
-    const b = new Board(this.rows, this.cols);
+    const b = new Board(this.rows, this.cols, this.holeMask);
     b.cells = this.cells.slice();
     return b;
   }
@@ -58,6 +81,15 @@ export class Board {
     }
   }
 
+  /** Playable cells currently on the board, scan order. */
+  countPlayable() {
+    let count = 0;
+    for (const p of this.positions()) {
+      if (!this.isHole(p.r, p.c)) count++;
+    }
+    return count;
+  }
+
   /** Find the position of a tile id, or null. */
   find(id) {
     for (let i = 0; i < this.cells.length; i++) {
@@ -68,6 +100,33 @@ export class Board {
     return null;
   }
 
+  /**
+   * @param {string[]} layout rows of '.'/'#', dimensions must match
+   * @returns {ReadonlyArray<boolean> | null} frozen mask, or null if no holes
+   */
+  static maskFromLayout(layout, rows, cols) {
+    if (!Array.isArray(layout) || layout.length !== rows) {
+      throw new Error('layout must have one row per board row');
+    }
+    const mask = new Array(rows * cols).fill(false);
+    let any = false;
+    for (let r = 0; r < rows; r++) {
+      if (typeof layout[r] !== 'string' || layout[r].length !== cols) {
+        throw new Error(`layout row ${r} must have ${cols} characters`);
+      }
+      for (let c = 0; c < cols; c++) {
+        const ch = layout[r][c];
+        if (ch === '#') {
+          mask[r * cols + c] = true;
+          any = true;
+        } else if (ch !== '.') {
+          throw new Error(`layout row ${r} has bad character "${ch}"`);
+        }
+      }
+    }
+    return any ? Object.freeze(mask) : null;
+  }
+
   toString() {
     const anySpecial = this.cells.some((t) => t !== null && t.kind !== 'normal');
     const lines = [];
@@ -75,7 +134,8 @@ export class Board {
       const tokens = [];
       for (let c = 0; c < this.cols; c++) {
         const t = this.get(r, c);
-        if (t === null) tokens.push('.');
+        if (this.isHole(r, c)) tokens.push('#');
+        else if (t === null) tokens.push('.');
         else if (t.kind === 'colorbomb') tokens.push('*');
         else tokens.push(COLOR_LETTERS[t.color] + (KIND_SUFFIX[t.kind] ?? ''));
       }
@@ -97,10 +157,23 @@ export class Board {
     if (tokenRows.some((row) => row.length !== cols)) {
       throw new Error('ragged board string');
     }
-    const board = new Board(tokenRows.length, cols);
-    for (let r = 0; r < tokenRows.length; r++) {
+    const rows = tokenRows.length;
+    const mask = new Array(rows * cols).fill(false);
+    let anyHole = false;
+    for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        board.set(r, c, parseToken(tokenRows[r][c], factory));
+        if (tokenRows[r][c] === '#') {
+          mask[r * cols + c] = true;
+          anyHole = true;
+        }
+      }
+    }
+    const board = new Board(rows, cols, anyHole ? Object.freeze(mask) : null);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const token = tokenRows[r][c];
+        if (token === '#') continue;
+        board.set(r, c, parseToken(token, factory));
       }
     }
     return board;

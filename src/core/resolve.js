@@ -22,16 +22,17 @@
  *   3. { type:'shuffle', moves }        only if the settled board had no
  *                                       valid move (ids preserved)
  *
- * Invariants on return: board is full, matchless, and has ≥1 valid move;
- * replaying the steps over a copy of the pre-move board reproduces the
- * post-move board exactly.
+ * Invariants on return: board is full (every non-hole cell holds a tile —
+ * hole cells, Board.isHole, are permanently null and never appear in any
+ * step), matchless, and has ≥1 valid move; replaying the steps over a copy
+ * of the pre-move board reproduces the post-move board exactly.
  *
  * The session layer (game.js) wraps this with moveSpent/reject/end steps and
  * goal bookkeeping.
  *
  * RNG consumption order (ports must match): spawn colors are drawn column
- * by column left→right, top→bottom within a column; reshuffle draws only
- * when it runs.
+ * by column left→right, top→bottom over the playable cells of a column;
+ * reshuffle draws only when it runs.
  */
 
 import { findMatches, decideSpecials } from './match.js';
@@ -165,14 +166,18 @@ function pushClearRound(ctx, steps, totals, scoreStart, round) {
 }
 
 /**
- * Slide every tile straight down into the holes below it.
- * Emitted per column left→right, bottom-up within the column.
+ * Slide every tile straight down into the empties below it, past any hole
+ * cells (which never hold tiles). Emitted per column left→right, bottom-up
+ * within the column; from→to distances count raw rows including holes, so a
+ * renderer's straight-line fall passes visually through the gaps.
  */
 export function applyGravity(board) {
   const moves = [];
   for (let c = 0; c < board.cols; c++) {
     let write = board.rows - 1;
+    while (write >= 0 && board.isHole(write, c)) write--;
     for (let r = board.rows - 1; r >= 0; r--) {
+      if (board.isHole(r, c)) continue;
       const tile = board.get(r, c);
       if (tile === null) continue;
       if (write !== r) {
@@ -180,27 +185,35 @@ export function applyGravity(board) {
         board.set(r, c, null);
         moves.push({ id: tile.id, from: { r, c }, to: { r: write, c } });
       }
-      write--;
+      do {
+        write--;
+      } while (write >= 0 && board.isHole(write, c));
     }
   }
   return moves;
 }
 
 /**
- * Fill the holes left at the top of each column with fresh tiles.
- * fromRowOffset is the column's spawn count, so a renderer can start the
- * whole batch stacked that many rows above the board and drop it in
- * formation.
+ * Fill every empty playable cell with fresh tiles (callers must have applied
+ * gravity first). fromRowOffset = the number of rows the spawn falls: per
+ * column the batch starts stacked contiguously just above row 0 in target
+ * order — the j-th spawn counting from the bottom of the batch starts at row
+ * −j, so fromRowOffset = at.r + j. On hole-free boards this equals the
+ * column's spawn count for every spawn (the batch drops in formation).
  */
 export function spawnFill(board, rng, factory, colorCount) {
   const spawns = [];
   for (let c = 0; c < board.cols; c++) {
-    let holes = 0;
-    while (holes < board.rows && board.get(holes, c) === null) holes++;
-    for (let r = 0; r < holes; r++) {
+    const targets = [];
+    for (let r = 0; r < board.rows; r++) {
+      if (!board.isHole(r, c) && board.get(r, c) === null) targets.push(r);
+    }
+    for (let i = 0; i < targets.length; i++) {
+      const r = targets[i];
+      const j = targets.length - i; // 1 for the bottom-most target
       const tile = factory.make(rng.int(colorCount));
       board.set(r, c, tile);
-      spawns.push({ tile, at: { r, c }, fromRowOffset: holes });
+      spawns.push({ tile, at: { r, c }, fromRowOffset: r + j });
     }
   }
   return spawns;

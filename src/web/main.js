@@ -222,7 +222,8 @@ function startLevel(id) {
   clock.timeScale = 1;
   const attempt = bumpAttempt(id);
   game = new Game(def, attemptSeed(def, attempt));
-  renderer.setBoardSize(def.rows, def.cols);
+  const board = game.board;
+  renderer.setBoardSize(def.rows, def.cols, (r, c) => board.isHole(r, c));
   renderer.syncFromBoard(game.board);
   renderer.state.selection = null;
   particles.clear();
