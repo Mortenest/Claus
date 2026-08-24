@@ -9,7 +9,10 @@ the CI & Deploy workflow).
 **Play:** swipe (or tap-tap) two neighboring candies to swap them. Match 3+ of a
 color to clear them; match 4 for a striped candy, an L/T for a wrapped candy, 5 in
 a row for a colorbomb. Meet each level's goal — a score target or collecting a
-color — before the moves run out. 18 levels with 1–3 star ratings; progress saves
+color — before the moves run out. Win with moves to spare and the **Sweet
+Finish** turns every unspent move into a striped candy that detonates in one
+grand chain. 18 levels across two worlds — Candy Meadow's classic boards, then
+Frost Night's shaped boards with holes — with 1–3 star ratings; progress saves
 locally.
 
 ## Run locally
