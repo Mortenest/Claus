@@ -13,16 +13,18 @@
  *                    { type:'end', outcome, stars, score, bonus? }  (only
  *                     when the level just ended) ] }
  *
- * The level ends the moment the goal is met after the board settles (early
- * win: remaining moves convert to bonus score before stars are computed),
- * or when the last move resolves without meeting it. Winning always grants
- * at least one star; a lost level grants none.
+ * The level ends the moment the goal is met after the board settles. An
+ * early win triggers the Sweet Finish (see resolve.js: remaining moves
+ * become striped candies that all detonate, scoring normally) before stars
+ * are computed; end.bonus = { movesConverted, total } describes it. A level
+ * that runs out of moves without meeting the goal is lost. Winning always
+ * grants at least one star; a lost level grants none.
  */
 
 import { createRng } from './rng.js';
-import { createTileFactory, SCORING, isAdjacent } from './tiles.js';
+import { createTileFactory, isAdjacent } from './tiles.js';
 import { generateBoard } from './generate.js';
-import { resolveMove } from './resolve.js';
+import { resolveMove, resolveFinale } from './resolve.js';
 import { isValidMove, findHint, findValidMoves } from './moves.js';
 
 /**
@@ -116,26 +118,9 @@ export class Game {
     this._movesLeft--;
     const steps = [{ type: 'moveSpent', movesLeft: this._movesLeft }];
 
-    const result = resolveMove(
-      {
-        board: this._board,
-        rng: this._rng,
-        factory: this._factory,
-        colorCount: this._level.colorCount,
-        scoreStart: this._score,
-      },
-      move,
-    );
+    const result = resolveMove(this._resolveCtx(), move);
     this._score += result.scoreDelta;
-
-    const goalColor = this._level.goal.type === 'collect' ? this._level.goal.color : null;
-    let runningCollected = this._collected;
-    for (const step of result.steps) {
-      if (step.type !== 'clear') continue;
-      if (goalColor !== null) runningCollected += step.collected[goalColor] ?? 0;
-      step.goal = this._goalSnapshot(step.scoreTotal, runningCollected);
-    }
-    this._collected = runningCollected;
+    this._stampGoals(result.steps);
     steps.push(...result.steps);
 
     const goalMet = this._goalMet();
@@ -143,13 +128,14 @@ export class Game {
       this._status = goalMet ? 'won' : 'lost';
       let bonus;
       if (goalMet && this._movesLeft > 0) {
-        bonus = {
-          perMove: SCORING.WIN_MOVE_BONUS,
-          movesConverted: this._movesLeft,
-          total: this._movesLeft * SCORING.WIN_MOVE_BONUS,
-        };
-        this._score += bonus.total;
+        const finale = resolveFinale(this._resolveCtx(), this._movesLeft);
+        this._score += finale.scoreDelta;
         this._movesLeft = 0;
+        this._stampGoals(finale.steps);
+        steps.push(...finale.steps);
+        if (finale.conversions > 0) {
+          bonus = { movesConverted: finale.conversions, total: finale.scoreDelta };
+        }
       }
       const stars = goalMet ? Math.max(1, this.starsForScore(this._score)) : 0;
       const end = { type: 'end', outcome: this._status, stars, score: this._score };
@@ -174,6 +160,28 @@ export class Game {
 
   validMoves() {
     return findValidMoves(this._board);
+  }
+
+  _resolveCtx() {
+    return {
+      board: this._board,
+      rng: this._rng,
+      factory: this._factory,
+      colorCount: this._level.colorCount,
+      scoreStart: this._score,
+    };
+  }
+
+  /** Stamp a goal snapshot onto every clear step; collect progress is monotone. */
+  _stampGoals(steps) {
+    const goalColor = this._level.goal.type === 'collect' ? this._level.goal.color : null;
+    let running = this._collected;
+    for (const step of steps) {
+      if (step.type !== 'clear') continue;
+      if (goalColor !== null) running += step.collected[goalColor] ?? 0;
+      step.goal = this._goalSnapshot(step.scoreTotal, running);
+    }
+    this._collected = running;
   }
 
   _goalMet() {

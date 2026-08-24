@@ -87,6 +87,12 @@ export function applyStepsToBoard(board, steps) {
           board.set(s.at.r, s.at.c, s.tile);
         }
         break;
+      case 'finale':
+        for (const conv of step.conversions) {
+          assert.equal(board.get(conv.pos.r, conv.pos.c)?.id, conv.replacedId, 'finale replaces the wrong tile');
+          board.set(conv.pos.r, conv.pos.c, conv.tile);
+        }
+        break;
       case 'reject':
       case 'moveSpent':
       case 'end':

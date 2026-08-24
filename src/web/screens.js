@@ -20,6 +20,8 @@ export const STRINGS = {
   restart: 'Restart',
   quit: 'Quit',
   won: 'Level Complete!',
+  sweetFinish: 'Sweet Finish!',
+  sweetFinishBonus: (points) => `Sweet Finish +${points.toLocaleString('en-US')}`,
   lost: 'Out of Moves!',
   lostSub: 'So close — one more go?',
   tryAgain: 'Try Again',
@@ -160,6 +162,7 @@ export function createScreens(handlers) {
         <p class="dialog-sub">${STRINGS.level(data.levelId)} · ${data.levelName}</p>
         <div class="dialog-stars animate">${stars}</div>
         <div class="dialog-score">${fmt(data.score)}</div>
+        ${data.bonusTotal ? `<p class="dialog-sub">${STRINGS.sweetFinishBonus(data.bonusTotal)}</p>` : ''}
         <div class="dialog-actions">
           ${data.hasNext ? button(STRINGS.next, 'next', true) : ''}
           ${button(STRINGS.tryAgain, 'replay', !data.hasNext)}
