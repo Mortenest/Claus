@@ -5,7 +5,7 @@
  * playback, and screens.
  */
 
-import { LEVELS, getLevel, attemptSeed } from '../core/levels.js';
+import { LEVELS, getLevel, attemptSeed, worldOf } from '../core/levels.js';
 import { Game } from '../core/game.js';
 import {
   loadProgress,
@@ -24,6 +24,9 @@ import { createInput } from './input.js';
 import { createParticles } from './particles.js';
 import { createAudio } from './audio.js';
 import { createHaptics } from './haptics.js';
+
+/** Testing switch: show every level unlocked (progression logic stays). */
+const UNLOCK_ALL = true;
 
 const canvas = document.getElementById('board');
 const sprites = createSpriteCache();
@@ -203,13 +206,20 @@ function syncHudToGame() {
   screens.setHud(hudState());
 }
 
+/** World theme + a slight per-level background shade rotation. */
+function applyTheme(levelId) {
+  const world = worldOf(levelId);
+  document.body.classList.toggle('theme-frost', world.theme === 'frost');
+  const indexInWorld = levelId - world.firstLevel;
+  document.body.dataset.shade = String(indexInWorld % 3);
+}
+
 function showLevels() {
   playback.cancel();
   game = null;
   progress = loadProgress();
-  screens.renderLevels(LEVELS, unlockedUpTo(progress, LEVELS.length), (id) =>
-    levelProgress(progress, id),
-  );
+  const unlockedTo = UNLOCK_ALL ? LEVELS.length : unlockedUpTo(progress, LEVELS.length);
+  screens.renderLevels(LEVELS, unlockedTo, (id) => levelProgress(progress, id));
   screens.show('levels');
 }
 
@@ -219,6 +229,7 @@ function startLevel(id) {
   currentLevelId = id;
   paused = false;
   clock.timeScale = 1;
+  applyTheme(id);
   const attempt = bumpAttempt(id);
   game = new Game(def, attemptSeed(def, attempt));
   const board = game.board;

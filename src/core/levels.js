@@ -23,6 +23,18 @@ import { Board } from './board.js';
 
 export { LEVELS };
 
+/** Worlds batch the levels: distinct art theme and board style per world. */
+export const WORLDS = [
+  { id: 1, name: 'Candy Meadow', theme: 'meadow', firstLevel: 1 },
+  { id: 2, name: 'Frost Night', theme: 'frost', firstLevel: 10 },
+];
+
+/** @returns {(typeof WORLDS)[number]} */
+export function worldOf(levelId) {
+  const index = Math.min(WORLDS.length - 1, Math.floor((levelId - 1) / 9));
+  return WORLDS[index];
+}
+
 /** @returns {LevelDef} */
 export function getLevel(id) {
   const def = LEVELS.find((l) => l.id === id);
