@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LEVELS, getLevel, attemptSeed, validateLevelDef } from '../src/core/levels.js';
+import { LEVELS, WORLDS, getLevel, attemptSeed, validateLevelDef, worldOf } from '../src/core/levels.js';
 
 test('every level definition validates', () => {
   assert.ok(LEVELS.length >= 10);
@@ -42,9 +42,22 @@ test('validateLevelDef rejects malformed definitions', () => {
 
 test('difficulty knobs stay in the tuned envelope', () => {
   for (const def of LEVELS) {
-    assert.ok(def.rows * def.cols >= 42, `level ${def.id} board too small`);
+    const playable = def.layout
+      ? def.layout.join('').split('').filter((ch) => ch === '.').length
+      : def.rows * def.cols;
+    assert.ok(playable >= 42, `level ${def.id} board too small (${playable} playable)`);
     if (def.goal.type === 'collect') {
       assert.ok(def.goal.color < def.colorCount, `level ${def.id} collect color missing`);
     }
+  }
+});
+
+test('worlds partition the level list', () => {
+  assert.equal(worldOf(1).theme, 'meadow');
+  assert.equal(worldOf(9).theme, 'meadow');
+  assert.equal(worldOf(10).theme, 'frost');
+  assert.equal(worldOf(18).theme, 'frost');
+  for (const world of WORLDS) {
+    assert.ok(LEVELS.some((l) => l.id === world.firstLevel));
   }
 });
