@@ -5,7 +5,7 @@
 
 import { PALETTE } from './sprites.js';
 import { worldOf } from '../core/levels.js';
-import { mascotSvg } from './mascot.js';
+import { mascotMarkup } from './mascot.js';
 
 export const STRINGS = {
   tagline: 'Match three. Crunch the goal.',
@@ -99,7 +99,7 @@ export function createScreens(handlers) {
         header.className = 'world-header';
         header.dataset.theme = world.theme;
         header.innerHTML =
-          `<span class="world-mini mascot">${mascotSvg(world.theme, 'idle')}</span>` +
+          `<span class="world-mini mascot">${mascotMarkup(world.theme, 'idle')}</span>` +
           `World ${world.id} — ${world.name}`;
         grid = document.createElement('div');
         grid.className = 'level-grid';
@@ -175,7 +175,7 @@ export function createScreens(handlers) {
         )
         .join('');
       html = `
-        <div class="mascot dialog-mascot">${mascotSvg(data.theme ?? 'meadow', 'cheer')}</div>
+        <div class="mascot dialog-mascot">${mascotMarkup(data.theme ?? 'meadow', 'cheer')}</div>
         <h3 class="dialog-title">${STRINGS.won}</h3>
         <p class="dialog-sub">${STRINGS.level(data.levelId)} · ${data.levelName}</p>
         <div class="dialog-stars animate">${stars}</div>
@@ -188,7 +188,7 @@ export function createScreens(handlers) {
         </div>`;
     } else if (kind === 'lost') {
       html = `
-        <div class="mascot dialog-mascot">${mascotSvg(data.theme ?? 'meadow', 'sad')}</div>
+        <div class="mascot dialog-mascot">${mascotMarkup(data.theme ?? 'meadow', 'sad')}</div>
         <h3 class="dialog-title">${STRINGS.lost}</h3>
         <p class="dialog-sub">${STRINGS.lostSub}</p>
         <div class="dialog-score">${fmt(data.score)}</div>

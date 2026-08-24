@@ -1,0 +1,22 @@
+{
+  "bg/frost": "bg/frost.webp",
+  "bg/meadow": "bg/meadow.webp",
+  "candy/blue": "candy/blue.webp",
+  "candy/colorbomb": "candy/colorbomb.webp",
+  "candy/green": "candy/green.webp",
+  "candy/orange": "candy/orange.webp",
+  "candy/purple": "candy/purple.webp",
+  "candy/red": "candy/red.webp",
+  "candy/yellow": "candy/yellow.webp",
+  "logo": "logo.webp",
+  "mascot/frost/cheer": "mascot/frost/cheer.webp",
+  "mascot/frost/idle": "mascot/frost/idle.webp",
+  "mascot/frost/sad": "mascot/frost/sad.webp",
+  "mascot/frost/starstruck": "mascot/frost/starstruck.webp",
+  "mascot/frost/wow": "mascot/frost/wow.webp",
+  "mascot/meadow/cheer": "mascot/meadow/cheer.webp",
+  "mascot/meadow/idle": "mascot/meadow/idle.webp",
+  "mascot/meadow/sad": "mascot/meadow/sad.webp",
+  "mascot/meadow/starstruck": "mascot/meadow/starstruck.webp",
+  "mascot/meadow/wow": "mascot/meadow/wow.webp"
+}

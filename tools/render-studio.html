@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Candy Claus — Render Studio</title>
+<!-- Dev-only asset bakery: every canvas below is one asset, drawn with
+     layered lighting (Chromium ctx.filter blur is the workhorse) and
+     exported by tools/bake-assets.cjs. Never loaded by the game. -->
+<style>
+  body { margin: 0; padding: 20px; background: #14101f; color: #cbb; font-family: system-ui; }
+  .board { display: inline-block; margin: 10px; vertical-align: top; }
+  .board div { font-size: 12px; margin-bottom: 4px; color: #8a7ba8; }
+  canvas { background: repeating-conic-gradient(#1c1730 0% 25%, #221b38 0% 50%) 0 0 / 24px 24px; max-width: 300px; height: auto; display: block; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+/* ================= shared helpers ================= */
+
+const TAU = Math.PI * 2;
+
+// the baker waits for this — the module script below flips it when the
+// async boards (mascots, logo, icon) have finished drawing
+window.__bakeReady = false;
+
+// deterministic pseudo-random so every bake is identical
+function makeRand(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+function board(name, w, h, draw) {
+  const wrap = document.createElement('div');
+  wrap.className = 'board';
+  wrap.innerHTML = `<div>${name}</div>`;
+  const canvas = document.createElement('canvas');
+  canvas.id = `asset-${name}`;
+  canvas.width = w;
+  canvas.height = h;
+  wrap.append(canvas);
+  document.getElementById('root').append(wrap);
+  const ctx = canvas.getContext('2d');
+  draw(ctx, w, h);
+}
+
+function withFilter(ctx, filter, fn) {
+  ctx.save();
+  ctx.filter = filter;
+  fn();
+  ctx.restore();
+}
+
+/* ================= candy shapes (match the in-game silhouettes) ================= */
+
+function shapePath(ctx, shape, cx, cy, r) {
+  ctx.beginPath();
+  switch (shape) {
+    case 'circle':
+      ctx.arc(cx, cy, r, 0, TAU);
+      break;
+    case 'drop':
+      ctx.moveTo(cx, cy - r * 1.05);
+      ctx.bezierCurveTo(cx + r * 0.72, cy - r * 0.36, cx + r * 0.92, cy + r * 0.28, cx + r * 0.62, cy + r * 0.68);
+      ctx.bezierCurveTo(cx + r * 0.34, cy + r * 1.02, cx - r * 0.34, cy + r * 1.02, cx - r * 0.62, cy + r * 0.68);
+      ctx.bezierCurveTo(cx - r * 0.92, cy + r * 0.28, cx - r * 0.72, cy - r * 0.36, cx, cy - r * 1.05);
+      break;
+    case 'star': {
+      for (let i = 0; i < 10; i++) {
+        const rad = i % 2 === 0 ? r * 1.05 : r * 0.52;
+        const a = (i * Math.PI) / 5 - Math.PI / 2;
+        const x = cx + Math.cos(a) * rad;
+        const y = cy + Math.sin(a) * rad;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      break;
+    }
+    case 'triangle': {
+      const pts = [0, 1, 2].map((i) => {
+        const a = (i * TAU) / 3 - Math.PI / 2;
+        return { x: cx + Math.cos(a) * r * 1.08, y: cy + Math.sin(a) * r * 1.08 };
+      });
+      const corner = r * 0.3;
+      ctx.moveTo((pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
+      for (let i = 1; i <= 3; i++) {
+        const p = pts[i % 3];
+        const n = pts[(i + 1) % 3];
+        ctx.arcTo(p.x, p.y, (p.x + n.x) / 2, (p.y + n.y) / 2, corner);
+      }
+      ctx.closePath();
+      break;
+    }
+    case 'diamond':
+      ctx.moveTo(cx, cy - r * 1.08);
+      ctx.lineTo(cx + r * 0.84, cy);
+      ctx.lineTo(cx, cy + r * 1.08);
+      ctx.lineTo(cx - r * 0.84, cy);
+      ctx.closePath();
+      break;
+    case 'heart':
+      ctx.moveTo(cx, cy + r * 0.95);
+      ctx.bezierCurveTo(cx - r * 1.1, cy + r * 0.25, cx - r * 1.02, cy - r * 0.68, cx - r * 0.5, cy - r * 0.68);
+      ctx.bezierCurveTo(cx - r * 0.16, cy - r * 0.68, cx, cy - r * 0.4, cx, cy - r * 0.22);
+      ctx.bezierCurveTo(cx, cy - r * 0.4, cx + r * 0.16, cy - r * 0.68, cx + r * 0.5, cy - r * 0.68);
+      ctx.bezierCurveTo(cx + r * 1.02, cy - r * 0.68, cx + r * 1.1, cy + r * 0.25, cx, cy + r * 0.95);
+      break;
+  }
+}
+
+/* HSL helpers for building lighting ramps from one hue */
+const hsl = (h, s, l, a = 1) => `hsla(${h}, ${s}%, ${l}%, ${a})`;
+
+const CANDIES = {
+  red:    { shape: 'circle',   h: 348, s: 92 },
+  orange: { shape: 'drop',     h: 27,  s: 95 },
+  yellow: { shape: 'star',     h: 47,  s: 98 },
+  green:  { shape: 'triangle', h: 132, s: 68 },
+  blue:   { shape: 'diamond',  h: 203, s: 92 },
+  purple: { shape: 'heart',    h: 275, s: 82 },
+};
+
+function drawCandy(ctx, S, { shape, h, s }, seed) {
+  const rand = makeRand(seed);
+  const cx = S / 2;
+  const cy = S / 2 - S * 0.02;
+  const R = S * 0.335;
+  const path = () => shapePath(ctx, shape, cx, cy, R);
+
+  // 1. body base — offset radial for sphere-like shading
+  const grad = ctx.createRadialGradient(cx - R * 0.42, cy - R * 0.5, R * 0.1, cx, cy, R * 1.55);
+  grad.addColorStop(0, hsl(h + 6, s, 78));
+  grad.addColorStop(0.32, hsl(h, s, 62));
+  grad.addColorStop(0.72, hsl(h, s - 4, 46));
+  grad.addColorStop(1, hsl(h - 6, s - 8, 30));
+  path();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // everything below paints only on the body silhouette
+  ctx.globalCompositeOperation = 'source-atop';
+
+  // 2. subsurface glow from below (candy translucency)
+  withFilter(ctx, 'blur(70px)', () => {
+    ctx.fillStyle = hsl(h + 10, s, 68, 0.5);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + R * 0.62, R * 0.75, R * 0.5, 0, 0, TAU);
+    ctx.fill();
+  });
+
+  // 3. deep inner shading bottom-right (soft bevel)
+  withFilter(ctx, 'blur(46px)', () => {
+    ctx.strokeStyle = hsl(h - 8, s - 6, 20, 0.55);
+    ctx.lineWidth = R * 0.42;
+    path();
+    ctx.stroke();
+  });
+
+  // 4. rim light along the shadow side
+  withFilter(ctx, 'blur(16px)', () => {
+    ctx.strokeStyle = hsl(h + 14, s, 74, 0.85);
+    ctx.lineWidth = R * 0.09;
+    path();
+    ctx.stroke();
+  });
+  // then re-darken the top-left rim so the rim reads bottom-right only
+  withFilter(ctx, 'blur(30px)', () => {
+    const mask = ctx.createLinearGradient(cx - R, cy - R, cx + R * 0.6, cy + R * 0.6);
+    mask.addColorStop(0, hsl(h, s, 55, 0.55));
+    mask.addColorStop(0.55, hsl(h, s, 55, 0));
+    ctx.strokeStyle = mask;
+    ctx.lineWidth = R * 0.13;
+    path();
+    ctx.stroke();
+  });
+
+  // 5. analogous hue washes for color depth
+  withFilter(ctx, 'blur(90px)', () => {
+    ctx.fillStyle = hsl(h - 24, s, 58, 0.16);
+    ctx.beginPath();
+    ctx.ellipse(cx + R * 0.55, cy + R * 0.2, R * 0.7, R * 0.9, 0.4, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = hsl(h + 26, s, 66, 0.14);
+    ctx.beginPath();
+    ctx.ellipse(cx - R * 0.5, cy + R * 0.45, R * 0.6, R * 0.7, -0.4, 0, TAU);
+    ctx.fill();
+  });
+
+  // 6. sugar-crystal sparkles across the upper body
+  for (let i = 0; i < 60; i++) {
+    const a = rand() * TAU;
+    const d = Math.sqrt(rand()) * R * 0.92;
+    const x = cx + Math.cos(a) * d;
+    const y = cy + Math.sin(a) * d * 0.95;
+    const up = 1 - Math.max(0, (y - cy) / R);
+    ctx.fillStyle = `rgba(255,255,255,${(0.05 + rand() * 0.22) * (0.35 + up * 0.65)})`;
+    ctx.beginPath();
+    ctx.arc(x, y, 1.2 + rand() * 3.4, 0, TAU);
+    ctx.fill();
+  }
+
+  // 7. fine surface grain
+  for (let i = 0; i < 500; i++) {
+    const x = cx + (rand() * 2 - 1) * R * 1.05;
+    const y = cy + (rand() * 2 - 1) * R * 1.05;
+    ctx.fillStyle = rand() > 0.5 ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)';
+    ctx.fillRect(x, y, 2.2, 2.2);
+  }
+
+  // 8. primary specular — soft halo plus tight core
+  withFilter(ctx, 'blur(34px)', () => {
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath();
+    ctx.ellipse(cx - R * 0.38, cy - R * 0.44, R * 0.4, R * 0.26, -0.55, 0, TAU);
+    ctx.fill();
+  });
+  withFilter(ctx, 'blur(7px)', () => {
+    ctx.fillStyle = 'rgba(255,255,255,0.96)';
+    ctx.beginPath();
+    ctx.ellipse(cx - R * 0.4, cy - R * 0.47, R * 0.21, R * 0.11, -0.55, 0, TAU);
+    ctx.fill();
+  });
+  // 9. counter specular
+  withFilter(ctx, 'blur(9px)', () => {
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(cx + R * 0.42, cy + R * 0.5, R * 0.1, R * 0.055, 0.7, 0, TAU);
+    ctx.fill();
+  });
+
+  // 10. soft self edge (instead of a hard outline)
+  withFilter(ctx, 'blur(5px)', () => {
+    ctx.strokeStyle = hsl(h - 4, s, 26, 0.5);
+    ctx.lineWidth = R * 0.035;
+    path();
+    ctx.stroke();
+  });
+
+  ctx.globalCompositeOperation = 'destination-over';
+  // 11. contact shadow beneath
+  withFilter(ctx, 'blur(42px)', () => {
+    ctx.fillStyle = 'rgba(10, 4, 24, 0.55)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + R * 1.16, R * 0.8, R * 0.2, 0, 0, TAU);
+    ctx.fill();
+  });
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawColorbomb(ctx, S, seed) {
+  const rand = makeRand(seed);
+  const cx = S / 2;
+  const cy = S / 2 - S * 0.02;
+  const R = S * 0.335;
+
+  const grad = ctx.createRadialGradient(cx - R * 0.4, cy - R * 0.48, R * 0.1, cx, cy, R * 1.5);
+  grad.addColorStop(0, '#6b5595');
+  grad.addColorStop(0.4, '#3a2a60');
+  grad.addColorStop(0.8, '#221740');
+  grad.addColorStop(1, '#120b28');
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, TAU);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  ctx.globalCompositeOperation = 'source-atop';
+
+  // nebula washes
+  withFilter(ctx, 'blur(60px)', () => {
+    for (const [hh, x, y] of [[348, -0.4, 0.3], [203, 0.5, 0.15], [275, 0.1, 0.62], [47, -0.15, -0.3]]) {
+      ctx.fillStyle = hsl(hh, 90, 60, 0.22);
+      ctx.beginPath();
+      ctx.ellipse(cx + x * R, cy + y * R, R * 0.55, R * 0.42, x, 0, TAU);
+      ctx.fill();
+    }
+  });
+
+  // candy speckles orbiting
+  const cols = [[348, 92, 62], [27, 95, 60], [47, 98, 60], [132, 68, 52], [203, 92, 58], [275, 82, 62]];
+  for (let ring = 0; ring < 2; ring++) {
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * TAU + ring * 0.5 + 0.3;
+      const d = R * (ring === 0 ? 0.62 : 0.36);
+      const [hh, ss, ll] = cols[(i + ring * 3) % 6];
+      const x = cx + Math.cos(a) * d;
+      const y = cy + Math.sin(a) * d * 0.96;
+      const rr = R * (ring === 0 ? 0.1 : 0.075);
+      const g2 = ctx.createRadialGradient(x - rr * 0.3, y - rr * 0.4, rr * 0.1, x, y, rr);
+      g2.addColorStop(0, hsl(hh, ss, ll + 18));
+      g2.addColorStop(1, hsl(hh, ss, ll - 12));
+      ctx.beginPath();
+      ctx.arc(x, y, rr, 0, TAU);
+      ctx.fillStyle = g2;
+      ctx.fill();
+      withFilter(ctx, 'blur(3px)', () => {
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.beginPath();
+        ctx.arc(x - rr * 0.3, y - rr * 0.35, rr * 0.22, 0, TAU);
+        ctx.fill();
+      });
+    }
+  }
+
+  // star dust
+  for (let i = 0; i < 90; i++) {
+    const a = rand() * TAU;
+    const d = Math.sqrt(rand()) * R * 0.95;
+    ctx.fillStyle = `rgba(255,255,255,${0.1 + rand() * 0.5})`;
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, 0.8 + rand() * 2.4, 0, TAU);
+    ctx.fill();
+  }
+
+  // spec + rim
+  withFilter(ctx, 'blur(30px)', () => {
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(cx - R * 0.38, cy - R * 0.45, R * 0.38, R * 0.24, -0.55, 0, TAU);
+    ctx.fill();
+  });
+  withFilter(ctx, 'blur(6px)', () => {
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.beginPath();
+    ctx.ellipse(cx - R * 0.4, cy - R * 0.48, R * 0.18, R * 0.09, -0.55, 0, TAU);
+    ctx.fill();
+  });
+  withFilter(ctx, 'blur(14px)', () => {
+    ctx.strokeStyle = 'hsla(265, 90%, 70%, 0.8)';
+    ctx.lineWidth = R * 0.08;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 0.97, 0, TAU);
+    ctx.stroke();
+  });
+
+  ctx.globalCompositeOperation = 'destination-over';
+  withFilter(ctx, 'blur(42px)', () => {
+    ctx.fillStyle = 'rgba(10, 4, 24, 0.55)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + R * 1.16, R * 0.8, R * 0.2, 0, 0, TAU);
+    ctx.fill();
+  });
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ================= world backgrounds ================= */
+
+function drawMeadow(ctx, W, H) {
+  const rand = makeRand(0xfeed01);
+  const HORIZON = H * 0.46;
+
+  // banded sunset sky
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#5c2f7e');
+  sky.addColorStop(0.2, '#8b4292');
+  sky.addColorStop(0.36, '#c65f88');
+  sky.addColorStop(0.46, '#f0907e');
+  sky.addColorStop(0.52, '#8f4479');
+  sky.addColorStop(0.75, '#472561');
+  sky.addColorStop(1, '#241440');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+
+  // sun at the horizon (additive glow)
+  ctx.globalCompositeOperation = 'lighter';
+  withFilter(ctx, 'blur(90px)', () => {
+    ctx.fillStyle = 'rgba(255, 176, 120, 0.55)';
+    ctx.beginPath();
+    ctx.ellipse(W * 0.38, HORIZON, W * 0.34, H * 0.09, 0, 0, TAU);
+    ctx.fill();
+  });
+  withFilter(ctx, 'blur(18px)', () => {
+    ctx.fillStyle = 'rgba(255, 226, 180, 0.9)';
+    ctx.beginPath();
+    ctx.arc(W * 0.38, HORIZON - H * 0.005, W * 0.075, 0, TAU);
+    ctx.fill();
+  });
+  ctx.globalCompositeOperation = 'source-over';
+
+  // backlit clouds
+  for (let i = 0; i < 5; i++) {
+    const y = H * (0.1 + rand() * 0.26);
+    const x = rand() * W;
+    const scale = 0.5 + rand();
+    withFilter(ctx, 'blur(26px)', () => {
+      ctx.fillStyle = `rgba(255, ${165 + (rand() * 50) | 0}, 190, ${0.16 + rand() * 0.16})`;
+      for (let j = 0; j < 4; j++) {
+        ctx.beginPath();
+        ctx.ellipse(
+          x + (j - 1.5) * W * 0.05 * scale, y + (rand() - 0.5) * H * 0.012,
+          W * (0.05 + rand() * 0.045) * scale, H * 0.018 * scale, 0, 0, TAU,
+        );
+        ctx.fill();
+      }
+    });
+  }
+
+  // candy hills — four bands with backlit tops and lollipops in between
+  const bands = [
+    { y: H * 0.52, col: '#6e3776', lit: 'rgba(255,160,150,0.45)', blur: 10, amp: H * 0.045, pops: 4, popR: 0.026 },
+    { y: H * 0.62, col: '#54295f', lit: 'rgba(255,140,160,0.3)', blur: 6, amp: H * 0.06, pops: 3, popR: 0.034 },
+    { y: H * 0.74, col: '#3c1e4e', lit: 'rgba(255,120,170,0.2)', blur: 3, amp: H * 0.07, pops: 3, popR: 0.05 },
+    { y: H * 0.9, col: '#281440', lit: 'rgba(220,110,180,0.14)', blur: 1, amp: H * 0.05, pops: 0, popR: 0 },
+  ];
+  const hillPath = (band) => {
+    ctx.beginPath();
+    ctx.moveTo(-40, H + 40);
+    ctx.lineTo(-40, band.y);
+    const humps = 3 + (rand() * 2 | 0);
+    for (let i = 0; i < humps; i++) {
+      const x0 = (i / humps) * (W + 80) - 40;
+      const x1 = ((i + 1) / humps) * (W + 80) - 40;
+      ctx.quadraticCurveTo((x0 + x1) / 2, band.y - band.amp * (0.7 + rand() * 0.9), x1, band.y + band.amp * 0.2 * rand());
+    }
+    ctx.lineTo(W + 40, H + 40);
+    ctx.closePath();
+  };
+  bands.forEach((band) => {
+    // lollipops rise from behind this band
+    withFilter(ctx, `blur(${band.blur + 2}px)`, () => {
+      for (let i = 0; i < band.pops; i++) {
+        const x = W * (0.08 + rand() * 0.84);
+        const r = W * band.popR * (0.8 + rand() * 0.5);
+        const top = band.y - H * (0.06 + rand() * 0.075);
+        const tilt = (rand() - 0.5) * 0.24;
+        ctx.save();
+        ctx.translate(x, band.y + H * 0.02);
+        ctx.rotate(tilt);
+        const stickH = band.y + H * 0.02 - top;
+        ctx.strokeStyle = 'rgba(250, 236, 245, 0.85)';
+        ctx.lineWidth = r * 0.22;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, -stickH);
+        ctx.stroke();
+        const hue = [335, 15, 48, 285][(rand() * 4) | 0];
+        const lg = ctx.createRadialGradient(-r * 0.3, -stickH - r * 0.35, r * 0.1, 0, -stickH, r);
+        lg.addColorStop(0, `hsla(${hue}, 85%, 74%, 1)`);
+        lg.addColorStop(1, `hsla(${hue}, 75%, 48%, 1)`);
+        ctx.fillStyle = lg;
+        ctx.beginPath();
+        ctx.arc(0, -stickH, r, 0, TAU);
+        ctx.fill();
+        // swirl
+        ctx.strokeStyle = 'rgba(255, 245, 250, 0.75)';
+        ctx.lineWidth = r * 0.16;
+        ctx.beginPath();
+        ctx.arc(0, -stickH, r * 0.62, 0.4, 3.6);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, -stickH, r * 0.28, 2.6, 5.6);
+        ctx.stroke();
+        // glow kiss from the sun
+        ctx.fillStyle = 'rgba(255, 220, 190, 0.5)';
+        ctx.beginPath();
+        ctx.ellipse(-r * 0.35, -stickH - r * 0.4, r * 0.28, r * 0.16, -0.6, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+    });
+    withFilter(ctx, `blur(${band.blur}px)`, () => {
+      hillPath(band);
+      ctx.fillStyle = band.col;
+      ctx.fill();
+      // backlit crest
+      ctx.strokeStyle = band.lit;
+      ctx.lineWidth = H * 0.004;
+      ctx.stroke();
+    });
+  });
+
+  // floating pollen sparkles
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 60; i++) {
+    const x = rand() * W;
+    const y = H * 0.3 + rand() * H * 0.65;
+    withFilter(ctx, `blur(${1 + rand() * 3}px)`, () => {
+      ctx.fillStyle = `rgba(255, 214, 170, ${0.12 + rand() * 0.3})`;
+      ctx.beginPath();
+      ctx.arc(x, y, 1 + rand() * 3, 0, TAU);
+      ctx.fill();
+    });
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  vignette(ctx, W, H, 0.5);
+}
+
+function drawFrost(ctx, W, H) {
+  const rand = makeRand(0xfeed02);
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#123250');
+  sky.addColorStop(0.4, '#0e2440');
+  sky.addColorStop(0.75, '#0b1830');
+  sky.addColorStop(1, '#081020');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+
+  // moon + halo
+  withFilter(ctx, 'blur(60px)', () => {
+    ctx.fillStyle = 'rgba(190, 230, 255, 0.5)';
+    ctx.beginPath();
+    ctx.arc(W * 0.76, H * 0.14, W * 0.2, 0, TAU);
+    ctx.fill();
+  });
+  withFilter(ctx, 'blur(4px)', () => {
+    const mg = ctx.createRadialGradient(W * 0.74, H * 0.13, 5, W * 0.76, H * 0.14, W * 0.075);
+    mg.addColorStop(0, '#f4fbff');
+    mg.addColorStop(1, '#bfe0f5');
+    ctx.fillStyle = mg;
+    ctx.beginPath();
+    ctx.arc(W * 0.76, H * 0.14, W * 0.07, 0, TAU);
+    ctx.fill();
+  });
+
+  // aurora ribbons — additive, broad, luminous
+  ctx.globalCompositeOperation = 'lighter';
+  const ribbons = [
+    { y: H * 0.18, col: 'rgba(64, 235, 190, 0.3)', amp: H * 0.06, w: H * 0.075 },
+    { y: H * 0.25, col: 'rgba(90, 150, 255, 0.24)', amp: H * 0.075, w: H * 0.06 },
+    { y: H * 0.12, col: 'rgba(190, 110, 255, 0.18)', amp: H * 0.05, w: H * 0.05 },
+  ];
+  for (const rb of ribbons) {
+    withFilter(ctx, 'blur(44px)', () => {
+      ctx.beginPath();
+      ctx.moveTo(-80, rb.y + rb.amp);
+      for (let x = 0; x <= W + 160; x += W / 3) {
+        ctx.quadraticCurveTo(x + W / 6, rb.y - rb.amp * (1 + rand()), x + W / 3, rb.y + rb.amp * (rand() - 0.2));
+      }
+      ctx.lineWidth = rb.w;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = rb.col;
+      ctx.stroke();
+    });
+  }
+  // aurora shimmer columns
+  withFilter(ctx, 'blur(26px)', () => {
+    for (let i = 0; i < 8; i++) {
+      const x = W * (0.05 + rand() * 0.9);
+      const y = H * (0.1 + rand() * 0.16);
+      ctx.fillStyle = `rgba(${100 + rand() * 100 | 0}, ${200 + rand() * 55 | 0}, 230, ${0.06 + rand() * 0.1})`;
+      ctx.beginPath();
+      ctx.ellipse(x, y, W * 0.02, H * (0.05 + rand() * 0.05), 0, 0, TAU);
+      ctx.fill();
+    }
+  });
+  ctx.globalCompositeOperation = 'source-over';
+
+  // stars
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 110; i++) {
+    const x = rand() * W;
+    const y = rand() * H * 0.5;
+    const tw = 0.15 + rand() * 0.6;
+    ctx.fillStyle = `rgba(230, 245, 255, ${tw})`;
+    ctx.beginPath();
+    ctx.arc(x, y, 0.7 + rand() * 1.9, 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  // grand irregular peaks — two ranges with moonlit flanks and snowcaps
+  const ranges = [
+    { y: H * 0.62, col: '#1a3a58', litCol: 'rgba(190, 228, 255, 0.35)', blur: 8, peaks: 3, hMin: 0.14, hMax: 0.2 },
+    { y: H * 0.72, col: '#122a45', litCol: 'rgba(170, 215, 250, 0.22)', blur: 3, peaks: 4, hMin: 0.1, hMax: 0.16 },
+  ];
+  for (const rg of ranges) {
+    withFilter(ctx, `blur(${rg.blur}px)`, () => {
+      for (let i = 0; i < rg.peaks; i++) {
+        const cx = W * ((i + 0.5) / rg.peaks + (rand() - 0.5) * 0.14);
+        const pw = W * (0.3 + rand() * 0.16);
+        const ph = H * (rg.hMin + rand() * (rg.hMax - rg.hMin));
+        const apex = { x: cx + (rand() - 0.5) * pw * 0.2, y: rg.y - ph };
+        // body
+        ctx.beginPath();
+        ctx.moveTo(cx - pw / 2, rg.y + H * 0.02);
+        ctx.lineTo(apex.x, apex.y);
+        ctx.lineTo(cx + pw / 2, rg.y + H * 0.02);
+        ctx.closePath();
+        ctx.fillStyle = rg.col;
+        ctx.fill();
+        // moonlit right flank (moon sits top-right)
+        ctx.beginPath();
+        ctx.moveTo(apex.x, apex.y);
+        ctx.lineTo(cx + pw / 2, rg.y + H * 0.02);
+        ctx.lineTo(cx + pw * 0.22, rg.y + H * 0.02);
+        ctx.closePath();
+        ctx.fillStyle = rg.litCol;
+        ctx.fill();
+        // snowcap
+        const capH = ph * 0.22;
+        ctx.beginPath();
+        ctx.moveTo(apex.x, apex.y);
+        ctx.lineTo(apex.x + pw * 0.09, apex.y + capH);
+        ctx.lineTo(apex.x + pw * 0.03, apex.y + capH * 0.8);
+        ctx.lineTo(apex.x - 0.02 * pw, apex.y + capH * 1.1);
+        ctx.lineTo(apex.x - pw * 0.07, apex.y + capH * 0.75);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(226, 243, 255, 0.9)';
+        ctx.fill();
+      }
+    });
+  }
+
+  // valley fog — soft luminous band where the peaks meet the dark valley
+  withFilter(ctx, 'blur(46px)', () => {
+    ctx.fillStyle = 'rgba(120, 170, 215, 0.13)';
+    ctx.beginPath();
+    ctx.ellipse(W * 0.5, H * 0.75, W * 0.8, H * 0.045, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(90, 140, 190, 0.1)';
+    ctx.beginPath();
+    ctx.ellipse(W * 0.28, H * 0.79, W * 0.55, H * 0.035, 0, 0, TAU);
+    ctx.fill();
+  });
+
+  // foreground snow drifts — soft moonlit humps
+  const drifts = [
+    { y: H * 0.84, col: '#243d5c', lit: 'rgba(205, 235, 255, 0.3)', blur: 2 },
+    { y: H * 0.93, col: '#182c48', lit: 'rgba(190, 225, 255, 0.2)', blur: 1 },
+  ];
+  for (const d of drifts) {
+    withFilter(ctx, `blur(${d.blur}px)`, () => {
+      ctx.beginPath();
+      ctx.moveTo(-40, H + 40);
+      ctx.lineTo(-40, d.y);
+      for (let x = 0; x <= W + 80; x += W / 3) {
+        ctx.quadraticCurveTo(x + W / 6, d.y - H * (0.03 + rand() * 0.035), x + W / 3, d.y + H * 0.012 * rand());
+      }
+      ctx.lineTo(W + 40, H + 40);
+      ctx.closePath();
+      ctx.fillStyle = d.col;
+      ctx.fill();
+      ctx.strokeStyle = d.lit;
+      ctx.lineWidth = H * 0.0045;
+      ctx.stroke();
+    });
+  }
+
+  // drifting snow bokeh
+  for (let i = 0; i < 40; i++) {
+    const x = rand() * W;
+    const y = rand() * H;
+    withFilter(ctx, `blur(${3 + rand() * 18}px)`, () => {
+      ctx.fillStyle = `rgba(235, 248, 255, ${0.06 + rand() * 0.18})`;
+      ctx.beginPath();
+      ctx.arc(x, y, 3 + rand() * 13, 0, TAU);
+      ctx.fill();
+    });
+  }
+
+  vignette(ctx, W, H, 0.55);
+}
+
+function vignette(ctx, W, H, strength) {
+  const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.75);
+  v.addColorStop(0, 'rgba(0,0,0,0)');
+  v.addColorStop(1, `rgba(4, 2, 12, ${strength})`);
+  ctx.fillStyle = v;
+  ctx.fillRect(0, 0, W, H);
+}
+
+/* ================= boards ================= */
+
+let seed = 11;
+for (const [name, spec] of Object.entries(CANDIES)) {
+  board(`candy-${name}`, 1024, 1024, (ctx, w) => drawCandy(ctx, w, spec, seed += 7));
+}
+board('candy-colorbomb', 1024, 1024, (ctx, w) => drawColorbomb(ctx, w, 99));
+board('bg-meadow', 1080, 1920, (ctx, w, h) => drawMeadow(ctx, w, h));
+board('bg-frost', 1080, 1920, (ctx, w, h) => drawFrost(ctx, w, h));
+</script>
+
+<script type="module">
+/* Mascots, logo and icon build on the game's own SVG character so the baked
+   images stay on-model. These draws are async (SVG → Image), so the baker
+   waits for window.__bakeReady instead of a fixed delay. */
+import { mascotSvg } from '../src/web/mascot.js';
+
+/** Rasterize an inline-SVG string (adds the xmlns Image loading requires). */
+function svgToImage(svgStr, size) {
+  const withNs = svgStr.replace(
+    '<svg ',
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" `,
+  );
+  const url = URL.createObjectURL(new Blob([withNs], { type: 'image/svg+xml' }));
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+/* ---- mascots: SVG base + painterly light clipped to the character ---- */
+
+async function drawMascot(ctx, size, theme, mood) {
+  const img = await svgToImage(mascotSvg(theme, mood), size);
+  const pad = size * 0.04;
+  ctx.drawImage(img, pad, pad, size - pad * 2, size - pad * 2);
+
+  ctx.globalCompositeOperation = 'source-atop';
+  // broad key-light sheen from the upper left
+  withFilter(ctx, 'blur(70px)', () => {
+    const g = ctx.createRadialGradient(size * 0.34, size * 0.24, 0, size * 0.34, size * 0.24, size * 0.62);
+    g.addColorStop(0, 'rgba(255, 252, 245, 0.2)');
+    g.addColorStop(1, 'rgba(255, 252, 245, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  });
+  // cool bounce shade settling lower right
+  withFilter(ctx, 'blur(80px)', () => {
+    const g = ctx.createRadialGradient(size * 0.74, size * 0.82, 0, size * 0.74, size * 0.82, size * 0.6);
+    g.addColorStop(0, theme === 'frost' ? 'rgba(35, 65, 125, 0.16)' : 'rgba(120, 40, 90, 0.14)');
+    g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  });
+  // faint sugar grain
+  const rand = makeRand(theme === 'frost' ? 313 : 707);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.045)';
+  for (let i = 0; i < 200; i++) {
+    ctx.beginPath();
+    ctx.arc(rand() * size, rand() * size, 0.8 + rand() * 1.5, 0, TAU);
+    ctx.fill();
+  }
+  // sticker-pop halo behind the character
+  ctx.globalCompositeOperation = 'destination-over';
+  withFilter(ctx, 'blur(60px)', () => {
+    const g = ctx.createRadialGradient(size / 2, size * 0.55, 0, size / 2, size * 0.55, size * 0.5);
+    g.addColorStop(0, theme === 'frost' ? 'rgba(150, 220, 255, 0.3)' : 'rgba(255, 190, 160, 0.3)');
+    g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  });
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ---- logo: per-letter balloon lettering on a gentle arch ---- */
+
+const LOGO_HUES = [
+  { h: 348, s: 92 }, { h: 27, s: 95 }, { h: 47, s: 98 },
+  { h: 132, s: 68 }, { h: 203, s: 92 }, { h: 275, s: 82 },
+];
+
+/** One balloon letter on its own offscreen canvas (gloss stays local). */
+function balloonLetter(ch, S, hue) {
+  const pad = S * 0.4;
+  const c = document.createElement('canvas');
+  const ctx = c.getContext('2d');
+  ctx.font = `700 ${S}px "DejaVu Sans", system-ui, sans-serif`;
+  const w = ctx.measureText(ch).width;
+  c.width = Math.ceil(w + pad * 2);
+  c.height = Math.ceil(S * 1.7);
+  ctx.font = `700 ${S}px "DejaVu Sans", system-ui, sans-serif`;
+  ctx.textBaseline = 'alphabetic';
+  ctx.lineJoin = 'round';
+  const x = pad;
+  const y = S * 1.18;
+
+  // fat dark outline → candy-shell rind → gradient body
+  ctx.lineWidth = S * 0.3;
+  ctx.strokeStyle = hsl(hue.h, 65, 24);
+  ctx.strokeText(ch, x, y);
+  ctx.lineWidth = S * 0.17;
+  ctx.strokeStyle = hsl(hue.h, hue.s, 62);
+  ctx.strokeText(ch, x, y);
+  const body = ctx.createLinearGradient(0, y - S, 0, y + S * 0.22);
+  body.addColorStop(0, hsl(hue.h, hue.s, 82));
+  body.addColorStop(0.55, hsl(hue.h, hue.s, 60));
+  body.addColorStop(1, hsl(hue.h, hue.s, 47));
+  ctx.fillStyle = body;
+  ctx.fillText(ch, x, y);
+
+  // glossy sheen across the upper half, clipped to the letter
+  ctx.globalCompositeOperation = 'source-atop';
+  withFilter(ctx, 'blur(6px)', () => {
+    const gl = ctx.createLinearGradient(0, y - S * 1.05, 0, y - S * 0.2);
+    gl.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
+    gl.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = gl;
+    ctx.fillRect(0, 0, c.width, y - S * 0.2);
+  });
+  ctx.globalCompositeOperation = 'source-over';
+  return { canvas: c, advance: w, ox: pad, oy: y };
+}
+
+function sparkle(ctx, x, y, r, alpha) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+  ctx.beginPath();
+  ctx.moveTo(x, y - r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.quadraticCurveTo(x, y, x, y + r);
+  ctx.quadraticCurveTo(x, y, x - r, y);
+  ctx.quadraticCurveTo(x, y, x, y - r);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawLogo(ctx, W, H) {
+  const word = 'Candy Claus';
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.font = '700 100px "DejaVu Sans", system-ui, sans-serif';
+  const spacing = 0.09;
+  let total = 0;
+  for (const ch of word) total += probe.measureText(ch).width + 100 * spacing;
+  const S = Math.min(H * 0.62, (W * 0.92) / (total / 100));
+
+  // hue cycle over visible letters only, so spaces don't skip a color
+  let hueIdx = 0;
+  const letters = [...word].map((ch) => ({
+    ch,
+    hue: LOGO_HUES[ch === ' ' ? 0 : hueIdx++ % LOGO_HUES.length],
+  }));
+  probe.font = `700 ${S}px "DejaVu Sans", system-ui, sans-serif`;
+  const widths = letters.map((l) => probe.measureText(l.ch).width + S * spacing);
+  const totalW = widths.reduce((a, b) => a + b, 0) - S * spacing;
+  let x = (W - totalW) / 2;
+  const baseY = H * 0.62;
+
+  letters.forEach((l, i) => {
+    const t = letters.length === 1 ? 0.5 : i / (letters.length - 1);
+    if (l.ch === ' ') { x += widths[i]; return; }
+    const { canvas, advance, ox, oy } = balloonLetter(l.ch, S, l.hue);
+    const cx = x + advance / 2;
+    const cy = baseY - Math.sin(t * Math.PI) * H * 0.09;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((t - 0.5) * 0.2);
+    ctx.drawImage(canvas, -ox - advance / 2, -oy);
+    ctx.restore();
+    x += widths[i];
+  });
+
+  // soft drop shadow from the finished wordmark itself
+  const copy = document.createElement('canvas');
+  copy.width = W;
+  copy.height = H;
+  const cctx = copy.getContext('2d');
+  cctx.drawImage(ctx.canvas, 0, 0);
+  cctx.globalCompositeOperation = 'source-in';
+  cctx.fillStyle = 'rgba(40, 8, 34, 0.5)';
+  cctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'destination-over';
+  withFilter(ctx, 'blur(14px)', () => ctx.drawImage(copy, 0, H * 0.035));
+  ctx.globalCompositeOperation = 'source-over';
+
+  const rand = makeRand(2024);
+  for (let i = 0; i < 7; i++) {
+    sparkle(
+      ctx,
+      W * (0.12 + rand() * 0.76),
+      H * (0.18 + rand() * 0.4),
+      H * (0.02 + rand() * 0.035),
+      0.5 + rand() * 0.4,
+    );
+  }
+}
+
+/* ---- app icon: sunset mini-scene with the cheering meadow gumdrop ---- */
+
+async function drawIcon(ctx, S) {
+  const sky = ctx.createLinearGradient(0, 0, 0, S);
+  ['#241340', '#45215f', '#7c3f7e', '#c86a8a', '#f2a984'].forEach((c, i, arr) =>
+    sky.addColorStop(i / (arr.length - 1), c),
+  );
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, S, S);
+
+  // sun glow low behind the character
+  ctx.globalCompositeOperation = 'lighter';
+  withFilter(ctx, 'blur(50px)', () => {
+    const g = ctx.createRadialGradient(S / 2, S * 0.66, 0, S / 2, S * 0.66, S * 0.46);
+    g.addColorStop(0, 'rgba(255, 214, 170, 0.85)');
+    g.addColorStop(0.55, 'rgba(255, 160, 130, 0.32)');
+    g.addColorStop(1, 'rgba(255, 160, 130, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, S, S);
+  });
+  ctx.globalCompositeOperation = 'source-over';
+
+  // foreground hill
+  withFilter(ctx, 'blur(6px)', () => {
+    ctx.fillStyle = '#33163f';
+    ctx.beginPath();
+    ctx.moveTo(-S * 0.1, S * 1.1);
+    ctx.quadraticCurveTo(S * 0.5, S * 0.78, S * 1.1, S * 1.1);
+    ctx.closePath();
+    ctx.fill();
+  });
+
+  const img = await svgToImage(mascotSvg('meadow', 'cheer'), S);
+  const m = S * 0.8;
+  ctx.drawImage(img, (S - m) / 2, S * 0.13, m, m);
+
+  const rand = makeRand(41);
+  for (let i = 0; i < 6; i++) {
+    sparkle(ctx, S * (0.1 + rand() * 0.8), S * (0.08 + rand() * 0.5), S * (0.015 + rand() * 0.02), 0.5 + rand() * 0.4);
+  }
+  vignette(ctx, S, S, 0.3);
+}
+
+/* ---- async boards ---- */
+
+const jobs = [];
+for (const theme of ['meadow', 'frost']) {
+  for (const mood of ['idle', 'cheer', 'wow', 'starstruck', 'sad']) {
+    board(`mascot-${theme}-${mood}`, 1024, 1024, (ctx, w) => {
+      jobs.push(drawMascot(ctx, w, theme, mood));
+    });
+  }
+}
+board('logo', 1600, 560, (ctx, w, h) => drawLogo(ctx, w, h));
+board('icon', 1024, 1024, (ctx, w) => {
+  jobs.push(drawIcon(ctx, w));
+});
+await Promise.all(jobs);
+window.__bakeReady = true;
+</script>
+</body>
+</html>
