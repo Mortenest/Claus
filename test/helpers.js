@@ -102,6 +102,9 @@ export function assertBoardsEqual(actual, expected, message = 'boards differ') {
   assert.equal(actual.rows, expected.rows, message);
   assert.equal(actual.cols, expected.cols, message);
   for (const p of actual.positions()) {
+    assert.equal(actual.isHole(p.r, p.c), expected.isHole(p.r, p.c), `${message}: mask at ${posKey(p)}`);
+  }
+  for (const p of actual.positions()) {
     const a = actual.get(p.r, p.c);
     const e = expected.get(p.r, p.c);
     if (a === null || e === null) {
@@ -116,13 +119,22 @@ export function assertBoardsEqual(actual, expected, message = 'boards differ') {
   }
 }
 
-/** Post-move invariants: full board, no matches, at least one valid move. */
-export function assertSettled(board) {
+/**
+ * Post-move invariants: every playable cell filled, no matches, at least one
+ * valid move (pass requireMove:false after a finale — the level is over).
+ */
+export function assertSettled(board, { requireMove = true } = {}) {
   for (const p of board.positions()) {
-    assert.ok(board.get(p.r, p.c) !== null, `hole at ${posKey(p)}`);
+    if (board.isHole(p.r, p.c)) {
+      assert.equal(board.get(p.r, p.c), null, `tile in a hole at ${posKey(p)}`);
+    } else {
+      assert.ok(board.get(p.r, p.c) !== null, `empty playable cell at ${posKey(p)}`);
+    }
   }
   assert.equal(findMatches(board).length, 0, 'board has leftover matches');
-  assert.ok(findValidMoves(board).length > 0, 'board has no valid move');
+  if (requireMove) {
+    assert.ok(findValidMoves(board).length > 0, 'board has no valid move');
+  }
 }
 
 /** All tile ids currently on the board (asserts uniqueness). */

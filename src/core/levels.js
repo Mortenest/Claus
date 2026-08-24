@@ -12,12 +12,14 @@
  *       | { type:'collect', color:number, count:number },
  *   stars: [number, number, number],  // cumulative score thresholds (1★..3★)
  *   seedBase: number,      // per-attempt seed = deriveSeed(seedBase, attempt)
+ *   layout?: string[],     // shaped board: rows of '.' (playable) / '#' (hole)
  * }} LevelDef
  */
 
 import { LEVELS } from './levels-data.js';
 import { deriveSeed } from './rng.js';
 import { COLORS } from './tiles.js';
+import { Board } from './board.js';
 
 export { LEVELS };
 
@@ -66,4 +68,31 @@ export function validateLevelDef(def) {
     fail('for score goals the 1★ threshold must equal the target');
   }
   if (!Number.isInteger(def.seedBase) || def.seedBase < 0) fail('bad seedBase');
+  if (def.layout !== undefined) {
+    try {
+      Board.maskFromLayout(def.layout, def.rows, def.cols);
+    } catch (err) {
+      fail(`bad layout: ${err.message}`);
+    }
+    if (!hasPlayableRun(def.layout)) {
+      fail('layout needs at least one straight playable 3-run');
+    }
+  }
+}
+
+/** Some horizontal or vertical run of ≥3 '.' cells exists in the layout. */
+function hasPlayableRun(layout) {
+  const rows = layout.length;
+  const cols = layout[0].length;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (c + 2 < cols && layout[r][c] === '.' && layout[r][c + 1] === '.' && layout[r][c + 2] === '.') {
+        return true;
+      }
+      if (r + 2 < rows && layout[r][c] === '.' && layout[r + 1][c] === '.' && layout[r + 2][c] === '.') {
+        return true;
+      }
+    }
+  }
+  return false;
 }

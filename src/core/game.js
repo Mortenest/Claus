@@ -90,6 +90,8 @@ export class Game {
     if (
       !this._board.inBounds(move.from.r, move.from.c) ||
       !this._board.inBounds(move.to.r, move.to.c) ||
+      this._board.isHole(move.from.r, move.from.c) ||
+      this._board.isHole(move.to.r, move.to.c) ||
       !isAdjacent(move.from, move.to)
     ) {
       throw new Error('applyMove: cells must be adjacent and on the board');
