@@ -3,3 +3,9 @@ package-lock.json
 .DS_Store
 scratch/
 *.log
+
+# asset pipeline: raw bakes and drop-zone sources stay local; only the
+# postprocessed files under assets/ ship
+assets/raw-bake/
+assets-src/
+__pycache__/
